@@ -1,0 +1,1 @@
+(()=>{const l=document.querySelector("#game > canvas").getContext("2d");l.fillStyle="#253E52",l.fillRect(0,0,320,240),l.fillStyle="#c69e86",l.fillRect(160,75,120,120),l.fillStyle="#D36D44",l.fillRect(130,35,80,60),l.fillStyle="#ABADB5",l.fillRect(40,90,40,100)})();
