@@ -685,7 +685,8 @@ let state = {
   taxPct: 1.01,
   taxFixedAmount: 0,
   ownership: [30, 30, 40],
-  downpayments: [0, 0, 0]
+  downpayments: [0, 0, 0],
+  lockedIdx: -1  // which slider is currently locked
 };
 
 function parseNum(str) {
@@ -921,11 +922,90 @@ function buildOwnershipLegend() {
     `;
     container.appendChild(item);
   });
+
+  // Attach change handlers to all sliders
+  container.querySelectorAll('.legend-slider').forEach((slider, i) => {
+    slider.addEventListener('input', (e) => {
+      const idx = i;
+      const newValue = parseInt(e.target.value);
+      setOwnershipValue(idx, newValue);
+    });
+  });
+}
+
+function setOwnershipValue(idx, value) {
+  const sliders = state.ownership;
+
+  // Ensure the lock is on a different slider than the one being dragged.
+  // If the dragged slider is already the locked one, move the lock
+  // to a different slider so exactly one other slider absorbs the change.
+  if (state.lockedIdx === idx) {
+    for (let i = 0; i < sliders.length; i++) {
+      if (i !== idx) {
+        state.lockedIdx = i;
+        break;
+      }
+    }
+  }
+
+  const previousValue = sliders[idx];
+  const totalChange = previousValue - value;
+
+  // Count unlocked sliders (excluding the dragged slider and the locked slider)
+  let unlockedCount = 0;
+  for (let i = 0; i < sliders.length; i++) {
+    if (i !== idx && i !== state.lockedIdx) {
+      unlockedCount++;
+    }
+  }
+  const adjustment = unlockedCount > 0 ? totalChange / unlockedCount : 0;
+
+  let hasRoundedUp = false;
+
+  for (let i = 0; i < sliders.length; i++) {
+    if (i !== idx && i !== state.lockedIdx) {
+      if (hasRoundedUp) {
+        sliders[i] += Math.ceil(adjustment);
+        hasRoundedUp = true;
+      } else {
+        sliders[i] += Math.floor(adjustment);
+        hasRoundedUp = true;
+      }
+    }
+  }
+
+  sliders[idx] = value;
+
+  // Clamp all values to 0-100
+  for (let i = 0; i < sliders.length; i++) {
+    sliders[i] = Math.max(0, Math.min(100, sliders[i]));
+  }
+
+  // Reconcile rounding errors by adjusting the modified slider
+  const currentSum = sliders.reduce((s, v) => s + v, 0);
+  sliders[idx] += (100 - currentSum);
+
+  // Unlock all sliders, then lock the one just moved
+  state.lockedIdx = idx;
+
+  // Update the UI
+  updateAll();
+}
+
+function updateOwnershipSliders() {
+  const container = document.getElementById('ownershipLegend');
+  const sliderEls = container.querySelectorAll('.legend-slider');
+  const pctEls = container.querySelectorAll('.legend-pct');
+
+  state.ownership.forEach((val, i) => {
+    if (sliderEls[i]) sliderEls[i].value = val;
+    if (pctEls[i]) pctEls[i].textContent = val + '%';
+  });
 }
 
 function updateAll() {
   drawPieChart();
-  buildOwnershipLegend();
+  updateOwnershipSliders();
   updateResults();
 }
 
@@ -994,6 +1074,7 @@ document.querySelectorAll('input[type="number"]').forEach(input => {
 });
 
 buildParticipantCards();
+buildOwnershipLegend();
 updateAll();
 </script>
 
