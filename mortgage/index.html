@@ -78,6 +78,7 @@
     color: var(--muted); font-size: 13px; pointer-events: none;
   }
 
+
   /* Pie Chart Section */
   .chart-section {
     display: grid;
@@ -93,12 +94,11 @@
     user-select: none; -webkit-user-select: none;
   }
   .pie-wrap svg { width: 100%; height: 100%; display: block; shape-rendering: geometricPrecision; }
-  .slice { transition: opacity .15s; cursor: default; }
-  .slice:hover { opacity: .88; }
-  .edge-hit {
-    stroke: transparent; stroke-width: 18; cursor: grab; fill: none;
+  .slice { transition: opacity .15s; }
+  .slice-hit {
+    fill: transparent; cursor: grab; pointer-events: all;
   }
-  .edge-hit.dragging { cursor: grabbing; }
+  .slice-hit.dragging { cursor: grabbing; }
   .slice-label {
     font-size: 9px; font-weight: 600; fill: #fff;
     text-anchor: middle; dominant-baseline: central;
@@ -214,7 +214,6 @@
 
 <div class="container">
   <h1>Mortgage Calculator</h1>
-  <p class="subtitle">Shared ownership for Lauren, Polina &amp; Stewart</p>
 
   <!-- Shared Details -->
   <div class="card">
@@ -247,7 +246,7 @@
         <div class="pie-wrap">
           <svg viewBox="0 0 200 200" id="pie"></svg>
         </div>
-        <p class="hint">Drag a boundary to adjust ownership %</p>
+        <p class="hint">Drag any slice half to adjust its boundary</p>
         <div class="pie-legend" id="pieLegend"></div>
       </div>
       <div class="participants">
@@ -258,7 +257,7 @@
             <span class="p-ownership" id="pOwn0">30%</span>
           </div>
           <label style="font-size:12px;color:var(--muted);margin-bottom:4px;display:block;">Down Payment</label>
-          <input type="text" id="down0" value="$150,000">
+          <input type="text" id="down0" value="$200,000">
         </div>
         <div class="p-card polina">
           <div class="p-header">
@@ -267,7 +266,7 @@
             <span class="p-ownership" id="pOwn1">30%</span>
           </div>
           <label style="font-size:12px;color:var(--muted);margin-bottom:4px;display:block;">Down Payment</label>
-          <input type="text" id="down1" value="$150,000">
+          <input type="text" id="down1" value="$0">
         </div>
         <div class="p-card stewart">
           <div class="p-header">
@@ -276,7 +275,7 @@
             <span class="p-ownership" id="pOwn2">40%</span>
           </div>
           <label style="font-size:12px;color:var(--muted);margin-bottom:4px;display:block;">Down Payment</label>
-          <input type="text" id="down2" value="$200,000">
+          <input type="text" id="down2" value="$575,000">
         </div>
       </div>
     </div>
@@ -326,7 +325,7 @@
   const MIN_GAP = 0.05;
   const SEAM_OVERLAP = 0.012;
 
-  let boundaries = [0, TAU * 0.3, TAU * 0.6];
+  let boundaries = [0, 30, 50]; // stored as percentages (0–100)
 
   function angleToPoint(a, radius = R) {
     return { x: CX + radius * Math.sin(a), y: CY - radius * Math.cos(a) };
@@ -354,32 +353,62 @@
 
   function getPercent(i) {
     let span = boundaries[(i + 1) % 3] - boundaries[i];
-    if (span <= 0) span += TAU;
-    return span / TAU * 100;
+    if (span < 0) span += 100;
+    return span;
   }
-
+  function pctToAngle(pct) {
+    return pct / 100 * TAU;
+  }
   function renderPie() {
     const n = 3;
     svg.innerHTML = '';
 
-    // Draw slices
+    // 1. Colored slices (bottom layer)
     for (let i = 0; i < n; i++) {
-      const drawStart = boundaries[i] - SEAM_OVERLAP;
-      const end = boundaries[(i + 1) % n];
+      const drawStart = pctToAngle(boundaries[i]) - SEAM_OVERLAP;
+      const end = pctToAngle(boundaries[(i + 1) % n]);
       const path = document.createElementNS(SVGNS, 'path');
       path.setAttribute('d', slicePath(drawStart, end));
       path.setAttribute('fill', colors[i]);
       path.setAttribute('class', 'slice');
       svg.appendChild(path);
+    }
 
-      // Label inside slice: show name + percentage
-      let span = end - boundaries[i];
+    // 2. Hit areas (bisected halves)
+    for (let i = 0; i < n; i++) {
+      const start = pctToAngle(boundaries[i]);
+      const end = pctToAngle(boundaries[(i + 1) % n]);
+      let span = end - start;
       if (span <= 0) span += TAU;
-      let mid = boundaries[i] + span / 2;
-      const lp = angleToPoint(mid, R * 0.5);
-      const pct = getPercent(i).toFixed(0);
+      const bisect = start + span / 2;
 
-      // Truncate name to fit; use ellipsis if too long
+      // Left half → adjusts start boundary (boundaries[i])
+      const leftHit = document.createElementNS(SVGNS, 'path');
+      leftHit.setAttribute('d', slicePath(start, bisect));
+      leftHit.setAttribute('fill', 'transparent');
+      leftHit.setAttribute('class', 'slice-hit');
+      leftHit.dataset.idx = i;
+      svg.appendChild(leftHit);
+
+      // Right half → adjusts end boundary (boundaries[(i+1)%n])
+      const rightHit = document.createElementNS(SVGNS, 'path');
+      rightHit.setAttribute('d', slicePath(bisect, end));
+      rightHit.setAttribute('fill', 'transparent');
+      rightHit.setAttribute('class', 'slice-hit');
+      rightHit.dataset.idx = (i + 1) % n;
+      svg.appendChild(rightHit);
+
+
+    }
+
+    // 3. Labels (top layer)
+    for (let i = 0; i < n; i++) {
+      let span = boundaries[(i + 1) % n] - boundaries[i];
+      if (span < 0) span += 100;
+      let mid = boundaries[i] + span / 2;
+      const lp = angleToPoint(pctToAngle(mid), R * 0.5);
+      const pct = Math.round(getPercent(i));
+
       let displayName = names[i];
       if (displayName.length > 10) {
         displayName = displayName.slice(0, 9) + '\u2026';
@@ -402,27 +431,15 @@
       svg.appendChild(text2);
     }
 
-    // Drag handles
-    for (let i = 0; i < n; i++) {
-      const rim = angleToPoint(boundaries[i]);
-      const hit = document.createElementNS(SVGNS, 'line');
-      hit.setAttribute('x1', CX); hit.setAttribute('y1', CY);
-      hit.setAttribute('x2', rim.x.toFixed(3)); hit.setAttribute('y2', rim.y.toFixed(3));
-      hit.setAttribute('class', 'edge-hit');
-      hit.dataset.idx = i;
-      svg.appendChild(hit);
-    }
-
     renderLegend();
   }
 
   function renderLegend() {
     legendEl.innerHTML = '';
     for (let i = 0; i < 3; i++) {
-      const pct = getPercent(i);
       const item = document.createElement('div');
       item.className = 'pie-legend-item';
-      item.innerHTML = `<span class="pie-swatch" style="background:${colors[i]}"></span>${names[i]}<span class="pct">${pct.toFixed(1)}%</span>`;
+      item.innerHTML = `<span class="pie-swatch" style="background:${colors[i]}"></span>${names[i]}<span class="pct">${Math.round(getPercent(i))}%</span>`;
       legendEl.appendChild(item);
     }
   }
@@ -430,12 +447,12 @@
   // Pie drag
   let dragInfo = null;
   function setActive(i, on) {
-    const hit = svg.querySelector(`.edge-hit[data-idx="${i}"]`);
+    const hit = svg.querySelector(`.slice-hit[data-idx="${i}"]`);
     if (hit) hit.classList.toggle('dragging', on);
   }
   function onPointerDown(evt) {
     const t = evt.target;
-    if (!t.classList.contains('edge-hit')) return;
+    if (!t.classList.contains('slice-hit')) return;
     evt.preventDefault();
     dragInfo = { idx: parseInt(t.dataset.idx, 10) };
     setActive(dragInfo.idx, true);
@@ -451,11 +468,12 @@
     const prev = (i - 1 + 3) % 3, next = (i + 1) % 3;
     const lower = boundaries[prev], upper = boundaries[next];
     const p = eventToViewBox(evt);
-    let mouse = pointToAngle(p.x, p.y);
-    let gap = upper - lower; if (gap <= 0) gap += TAU;
-    let rel = mouse - lower; if (rel < 0) rel += TAU;
+    // Convert mouse angle to percentage
+    let mousePct = pointToAngle(p.x, p.y) / TAU * 100;
+    let gap = upper - lower; if (gap < 0) gap += 100;
+    let rel = mousePct - lower; if (rel < 0) rel += 100;
     rel = Math.max(MIN_GAP, Math.min(gap - MIN_GAP, rel));
-    boundaries[i] = (lower + rel) % TAU;
+    boundaries[i] = (lower + rel) % 100;
     renderPie();
     setActive(i, true);
     updateOwnershipDisplays();
@@ -475,7 +493,7 @@
 
   function updateOwnershipDisplays() {
     for (let i = 0; i < 3; i++) {
-      document.getElementById(`pOwn${i}`).textContent = getPercent(i).toFixed(1) + '%';
+      document.getElementById(`pOwn${i}`).textContent = Math.round(getPercent(i)) + '%';
     }
   }
 
