@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StudioLive</title>
+  <script type="module" crossorigin src="./assets/index-D-aQJ_kz.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-0NfkXvGN.css">
+</head>
+<body>
+  <div id="loading">
+    <div class="loader-ring"></div>
+    <p>Loading Drum Kit...</p>
+  </div>
+
+  <div id="canvas-container"></div>
+  <div id="hit-flash"></div>
+
+  <!-- Top Bar -->
+  <div id="top-bar">
+    <h1>&#x1F3A9;&#xFE0F; StudioLive</h1>
+    <button id="autoplay-toggle" title="Autoplay">
+      <span class="toggle-icon">&#x25BC;</span>
+      <span>Autoplay</span>
+    </button>
+  </div>
+
+  <!-- Floating Autoplay Panel -->
+  <div class="autoplay-section" id="autoplay-panel">
+    <div class="autoplay-panel-header">
+      <span>Autoplay</span>
+      <span class="autoplay-panel-now" id="panel-now">&mdash;</span>
+    </div>
+    <div class="panel-bpm-row">
+      <div class="panel-bpm">
+        <label>BPM</label>
+        <input type="range" id="bpm-slider" min="60" max="200" value="120" />
+        <span class="panel-bpm-value" id="bpm-display">120</span>
+      </div>
+    </div>
+    <div class="autoplay-grid">
+      <button class="autoplay-btn" data-track="rock">&#x1F3B8; Rock</button>
+      <button class="autoplay-btn" data-track="hiphop">&#x1F3A4; Hip-Hop</button>
+      <button class="autoplay-btn" data-track="jazz">&#x1F3B7; Jazz</button>
+      <button class="autoplay-btn" data-track="edm">&#x26A1; EDM</button>
+      <button class="autoplay-btn" data-track="reggae">&#x1F7E2; Reggae</button>
+      <button class="autoplay-btn" data-track="latin">&#x1FA98; Latin</button>
+      <button class="autoplay-btn" data-track="funk">&#x1F4A5; Funk</button>
+      <button class="autoplay-btn" data-track="afrobeat">&#x1F30D; Afrobeat</button>
+      <button class="autoplay-btn" data-track="trap">&#x1F525; Trap</button>
+      <button class="autoplay-btn" data-track="fusion">&#x1F300; Fusion</button>
+      <button class="autoplay-btn autoplay-btn-play" id="play-pause">&#x25B6; Play</button>
+      <button class="autoplay-btn autoplay-btn-stop" id="stop-autoplay">&#x23F9; Stop</button>
+    </div>
+  </div>
+
+  <!-- Key Map Overlay -->
+  <div id="keymap-overlay" class="hidden">
+    <span class="keymap-title">KEY MAP</span>
+    <div class="keymap-item">
+      <div class="key-badge space" data-key=" ">SPC</div>
+      <span class="key-label">Kick Drum</span>
+    </div>
+    <div class="keymap-item">
+      <div class="key-badge" data-key="f">F</div>
+      <span class="key-label">Snare</span>
+    </div>
+    <div class="keymap-item">
+      <div class="key-badge" data-key="j">J</div>
+      <span class="key-label">Closed HH</span>
+    </div>
+    <div class="keymap-item">
+      <div class="key-badge" data-key="k">K</div>
+      <span class="key-label">Open HH</span>
+    </div>
+    <div class="keymap-item">
+      <div class="key-badge" data-key="g">G</div>
+      <span class="key-label">High Tom</span>
+    </div>
+    <div class="keymap-item">
+      <div class="key-badge" data-key="l">L</div>
+      <span class="key-label">Floor Tom</span>
+    </div>
+    <div class="keymap-item">
+      <div class="key-badge" data-key="t">T</div>
+      <span class="key-label">Crash</span>
+    </div>
+    <div class="keymap-item">
+      <div class="key-badge" data-key="y">Y</div>
+      <span class="key-label">Ride</span>
+    </div>
+  </div>
+
+  <button id="toggle-keymap" title="Toggle Key Map">&#x2328;&#xFE0F;</button>
+
+</body>
+</html>
