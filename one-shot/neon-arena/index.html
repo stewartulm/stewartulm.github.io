@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>NEON DRIFT — Arena</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap');
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:#050a0e; }
+body { font-family:'Rajdhani','Arial',sans-serif; }
+#game-canvas { position:fixed; top:0; left:0; width:100%; height:100%; z-index:0; }
+#hud { position:fixed; top:0; left:0; width:100%; height:100%; z-index:10; pointer-events:none; font-family:'Rajdhani','Arial',sans-serif; }
+
+/* Vignette */
+#vignette {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:radial-gradient(ellipse at center, rgba(5,10,14,0) 40%, rgba(5,10,14,0.85) 95%);
+  pointer-events:none; z-index:9;
+}
+
+/* Damage flash */
+#damage-flash {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:radial-gradient(ellipse at center, rgba(255,80,120,0.25) 0%, rgba(255,80,120,0) 70%);
+  pointer-events:none; z-index:8;
+  opacity:0; transition:opacity 0.08s;
+}
+#damage-flash.active { opacity:1; }
+
+/* Score */
+#score {
+  position:absolute; top:28px; left:28px; font-weight:700; font-size:42px;
+  background:linear-gradient(90deg, #e8f4f8, #4fc3f7); -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent; background-clip:text;
+  text-shadow:none; letter-spacing:2px;
+}
+
+/* Lives */
+#lives {
+  position:absolute; top:28px; right:28px; display:flex; gap:10px;
+}
+.life-star {
+  width:30px; height:30px;
+  clip-path:polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  background:#e8f4f8; transition:all 0.3s;
+}
+.life-star.lost {
+  transform:scale(0.6) rotate(20deg); opacity:0.12; filter:grayscale(1);
+}
+
+/* Combo */
+#combo {
+  position:absolute; bottom:90px; left:50%; transform:translateX(-50%);
+  font-weight:700; font-size:32px; opacity:0; transition:opacity 0.3s;
+  background:linear-gradient(90deg, #e8f4f8, #ffb74d); -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent; background-clip:text;
+  letter-spacing:3px;
+}
+#combo.show { opacity:1; }
+
+/* Wave timer */
+#wave-timer {
+  position:absolute; bottom:40px; left:50%; transform:translateX(-50%);
+  width:200px; height:3px; background:rgba(232,244,248,0.15); border-radius:2px; overflow:hidden;
+}
+#wave-timer-fill {
+  height:100%; width:100%; border-radius:2px;
+  background:linear-gradient(90deg, #4fc3f7, #ffb74d, #ff6b6b);
+  transform-origin:left; transform:scaleX(1); transition:transform 0.1s linear;
+}
+
+/* Score popups */
+.score-popup {
+  position:absolute; font-weight:700; font-size:24px; pointer-events:none;
+  background:linear-gradient(90deg, #e8f4f8, #4fc3f7); -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent; background-clip:text;
+  opacity:0; transition:none; z-index:11;
+}
+
+/* Screens */
+.screen {
+  position:fixed; top:0; left:0; width:100%; height:100%; z-index:20;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  transition:opacity 0.5s, visibility 0.5s;
+  pointer-events:auto;
+}
+.screen.hidden { opacity:0; visibility:hidden; pointer-events:none; }
+
+/* Start screen */
+#start-screen { background:rgba(5,10,14,0.92); }
+#start-screen .title {
+  font-size:88px; font-weight:700; letter-spacing:8px; margin-bottom:8px;
+  background:linear-gradient(90deg, #e8f4f8, #4fc3f7, #26c6da);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+}
+#start-screen .subtitle {
+  font-size:24px; color:#7ec8e3; letter-spacing:6px; margin-bottom:40px; font-weight:600;
+}
+#start-screen .instructions {
+  display:flex; gap:30px; margin-bottom:50px; flex-wrap:wrap; justify-content:center;
+}
+#start-screen .instr-item {
+  display:flex; flex-direction:column; align-items:center; gap:8px; color:#9bb7c4; font-size:14px; letter-spacing:1px;
+}
+#start-screen .instr-item .key-badge {
+  display:inline-block; padding:6px 14px; border-radius:4px;
+  background:rgba(79,195,247,0.2); border:1px solid rgba(79,195,247,0.4);
+  color:#4fc3f7; font-weight:700; font-size:18px; font-family:'Rajdhani','Arial',sans-serif;
+}
+#start-btn {
+  padding:16px 60px; font-size:22px; font-weight:700; letter-spacing:4px;
+  background:linear-gradient(135deg, #4fc3f7, #26c6da); border:none; border-radius:8px;
+  color:#050a0e; cursor:pointer; pointer-events:auto;
+  transition:transform 0.2s, box-shadow 0.2s; font-family:'Rajdhani','Arial',sans-serif;
+}
+#start-btn:hover { transform:translateY(-3px); box-shadow:0 8px 30px rgba(79,195,247,0.4); }
+
+/* Game over screen */
+#gameover-screen { background:rgba(5,10,14,0.95); }
+#gameover-screen .go-subtitle {
+  font-size:28px; color:#ffb74d; letter-spacing:4px; margin-bottom:16px; font-weight:600;
+}
+#gameover-screen .go-score {
+  font-size:120px; font-weight:700; letter-spacing:4px;
+  background:linear-gradient(90deg, #ffb74d, #ff6b6b);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  margin-bottom:10px;
+}
+#gameover-screen .go-stats {
+  display:flex; gap:40px; margin-bottom:40px; flex-wrap:wrap; justify-content:center;
+}
+#gameover-screen .go-stat {
+  display:flex; flex-direction:column; align-items:center; gap:4px; color:#9bb7c4; font-size:16px;
+}
+#gameover-screen .go-stat span { font-size:28px; font-weight:700; color:#e8f4f8; }
+#restart-btn {
+  padding:16px 50px; font-size:20px; font-weight:700; letter-spacing:3px;
+  background:linear-gradient(135deg, #ffb74d, #ff6b6b); border:none; border-radius:8px;
+  color:#050a0e; cursor:pointer; pointer-events:auto; animation:pulse 2s infinite;
+  transition:transform 0.2s, box-shadow 0.2s; font-family:'Rajdhani','Arial',sans-serif;
+}
+#restart-btn:hover { transform:translateY(-3px); box-shadow:0 8px 30px rgba(255,107,107,0.4); }
+@keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(255,107,107,0.4); } 50% { box-shadow:0 0 20px 10px rgba(255,107,107,0.2); } }
+
+/* Responsive */
+@media (max-width:600px) {
+  #start-screen .title { font-size:52px; letter-spacing:4px; }
+  #gameover-screen .go-score { font-size:72px; }
+  #score { font-size:28px; top:16px; left:16px; }
+  #lives { top:16px; right:16px; }
+  .life-star { width:22px; height:22px; }
+  #start-screen .instructions { gap:16px; }
+  #start-btn { padding:14px 40px; font-size:18px; }
+  #restart-btn { padding:14px 40px; font-size:18px; }
+  #wave-timer { width:140px; }
+}
+
+/* Prevent selection */
+body { -webkit-user-select:none; user-select:none; }
+</style>
+</head>
+<body>
+<div id="game-canvas"></div>
+<div id="vignette"></div>
+<div id="damage-flash"></div>
+<div id="hud">
+  <div id="score">0000</div>
+  <div id="lives">
+    <div class="life-star"></div>
+    <div class="life-star"></div>
+    <div class="life-star"></div>
+  </div>
+  <div id="combo">COMBO ×<span id="combo-val">0</span></div>
+  <div id="wave-timer"><div id="wave-timer-fill"></div></div>
+</div>
+<div id="start-screen" class="screen">
+  <div class="title">NEON DRIFT</div>
+  <div class="subtitle">Arena Survival</div>
+  <div class="instructions">
+    <div class="instr-item"><span class="key-badge">W A S D</span> Move</div>
+    <div class="instr-item"><span class="key-badge">Shift</span> Boost</div>
+    <div class="instr-item"><span class="key-badge">Space</span> Start</div>
+    <div class="instr-item"><span class="key-badge">R</span> Restart</div>
+  </div>
+  <button id="start-btn">Begin</button>
+</div>
+<div id="gameover-screen" class="screen hidden">
+  <div class="go-subtitle">Drift Complete</div>
+  <div class="go-score" id="go-score">0</div>
+  <div class="go-stats">
+    <div class="go-stat">Orbs Collected <span id="go-orbs">0</span></div>
+    <div class="go-stat">Wave Reached <span id="go-wave">0</span></div>
+    <div class="go-stat">Survived <span id="go-time">0s</span></div>
+  </div>
+  <button id="restart-btn">Press R to Restart</button>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.150.0/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+var T = window.THREE;
+if (!T) { console.error('Three.js not loaded'); return; }
+
+// ─── Constants ───────────────────────────────────────
+var ARENA_HALF = 40;
+var GRAVITY_VAL = -9.8;
+var PLAYER_ACCEL = 60;
+var PLAYER_FRICTION = 4.5;
+var MAX_SPEED = 22;
+var BOOST_MULT = 1.7;
+var BOOST_DRAIN = 0.5;
+var BOOST_RECHARGE = 0.25;
+var MAX_LIVES = 3;
+var MAX_COMBO = 8;
+var ORB_COUNT = 4;
+var COLLECT_DIST = 1.4;
+var TRAIL_SEGMENTS = 40;
+var PARTICLE_POOL = 600;
+var ENEMY_CAP_BASE = 18;
+
+// ─── State ────────────────────────────────────────────
+var gameState = 'menu'; // 'menu' | 'playing' | 'gameover'
+var score = 0;
+var lives = MAX_LIVES;
+var combo = 0;
+var wave = 0;
+var waveTime = 0;
+var boostMeter = 1;
+var isBoosting = false;
+var invulnTimer = 0;
+var isInvuln = false;
+var totalOrbs = 0;
+var survivedTime = 0;
+var gameStartTime = 0;
+
+var keys = {};
+var moveX = 0;
+var moveZ = 0;
+
+// ─── Scene Setup ──────────────────────────────────────
+var canvas = document.getElementById('game-canvas');
+var renderer = new T.WebGLRenderer({
+  antialias: true,
+  powerPreference: 'high-performance',
+  canvas: undefined
+});
+var rCanvas = renderer.domElement;
+rCanvas.style.display = 'block';
+rCanvas.style.position = 'absolute';
+rCanvas.style.top = '0';
+rCanvas.style.left = '0';
+canvas.appendChild(rCanvas);
+
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = T.PCFSoftShadowMap;
+renderer.outputEncoding = T.sRGBEncoding;
+renderer.toneMapping = T.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+var scene = new T.Scene();
+scene.background = new T.Color(0x050a0e);
+scene.fog = new T.FogExp2(0x050a0e, 0.022);
+
+var camera = new T.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 12, 18);
+
+// ─── Lighting ─────────────────────────────────────────
+var hemi = new T.HemisphereLight(0x87ceeb, 0x1a1a2e, 0.6);
+scene.add(hemi);
+
+var dirLight = new T.DirectionalLight(0xc8f0ff, 1.2);
+dirLight.position.set(30, 40, -20);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 100;
+dirLight.shadow.camera.left = -60;
+dirLight.shadow.camera.right = 60;
+dirLight.shadow.camera.top = 60;
+dirLight.shadow.camera.bottom = -60;
+scene.add(dirLight);
+
+var rimLight = new T.DirectionalLight(0xff6b6b, 0.5);
+rimLight.position.set(-30, 20, -30);
+scene.add(rimLight);
+
+var playerLight = new T.PointLight(0x4fc3f7, 2, 50);
+playerLight.position.set(0, 2, 0);
+scene.add(playerLight);
+
+// ─── Ground ───────────────────────────────────────────
+function makeGroundShader() {
+  return new T.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uPlayerPos: { value: new T.Vector3(0,0,0) },
+      uWave: { value: 0 },
+      uArenaHalf: { value: ARENA_HALF }
+    },
+    vertexShader: [
+      'varying vec3 vPos;',
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vUv = uv;',
+      '  vec4 wp = modelMatrix * vec4(position, 1.0);',
+      '  vPos = wp.xyz;',
+      '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+      '}'
+    ].join('\n'),
+    fragmentShader: [
+      'precision highp float;',
+      'uniform float uTime;',
+      'uniform vec3 uPlayerPos;',
+      'uniform float uWave;',
+      'uniform float uArenaHalf;',
+      'varying vec2 vUv;',
+      'varying vec3 vPos;',
+      'void main(){',
+      '  float cx = vPos.x, cz = vPos.z;',
+      '  float dx = abs(cx), dz = abs(cz);',
+      '  float edgeX = 1.0 - dx / uArenaHalf;',
+      '  float edgeZ = 1.0 - dz / uArenaHalf;',
+      '  float edgeGlow = 1.0 - clamp(min(edgeX, edgeZ) * 2.0, 0.0, 1.0);',
+      '  edgeGlow = pow(edgeGlow, 3.0) * 0.6;',
+      '',
+      '  float dist = length(vPos.xz);',
+      '  float fade = 1.0 - smoothstep(0.0, uArenaHalf * 0.8, dist);',
+      '',
+      '  float grid1 = 0.0;',
+      '  float gx1 = abs(fract(cx / 2.0 - 0.5) - 0.5);',
+      '  float gz1 = abs(fract(cz / 2.0 - 0.5) - 0.5);',
+      '  float line1 = 1.0 - min(gx1, gz1) * 20.0;',
+      '  grid1 = clamp(line1, 0.0, 1.0) * 0.08;',
+      '',
+      '  float grid2 = 0.0;',
+      '  float gx2 = abs(fract(cx / 8.0 - 0.5) - 0.5);',
+      '  float gz2 = abs(fract(cz / 8.0 - 0.5) - 0.5);',
+      '  float line2 = 1.0 - min(gx2, gz2) * 12.0;',
+      '  grid2 = clamp(line2, 0.0, 1.0) * 0.15;',
+      '',
+      '  float grid = max(grid1, grid2) * fade;',
+      '',
+      '  float pDist = length(vPos.xz - uPlayerPos.xz);',
+      '  float ring = 0.0;',
+      '  float rMod = sin(pDist * 0.5 - uTime * 0.8) * 0.5 + 0.5;',
+      '  ring = smoothstep(0.3, 0.0, abs(rMod - 0.5)) * 0.15;',
+      '  ring *= fade;',
+      '',
+      '  float waveMix = sin(uTime * 0.1 + uWave * 0.5) * 0.5 + 0.5;',
+      '  vec3 coldCol = vec3(0.04, 0.06, 0.08);',
+      '  vec3 warmCol = vec3(0.08, 0.06, 0.04);',
+      '  vec3 base = mix(coldCol, warmCol, waveMix);',
+      '',
+      '  vec3 gridCol = mix(vec3(0.15, 0.25, 0.35), vec3(0.35, 0.25, 0.15), waveMix);',
+      '  vec3 ringCol = mix(vec3(0.3, 0.6, 0.8), vec3(0.8, 0.5, 0.3), waveMix);',
+      '',
+      '  vec3 col = base + grid * gridCol + ring * ringCol;',
+      '  col += edgeGlow * vec3(1.0, 0.3, 0.2);',
+      '',
+      '  float scan = sin(vUv.y * 300.0 + uTime * 1.5) * 0.5 + 0.5;',
+      '  col += scan * 0.02;',
+      '',
+      '  gl_FragColor = vec4(col, 1.0);',
+      '}'
+    ].join('\n')
+  });
+}
+
+var groundGeo = new T.PlaneGeometry(ARENA_HALF * 2 + 4, ARENA_HALF * 2 + 4);
+var groundMat = makeGroundShader();
+var ground = new T.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.1;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ─── Arena Walls ──────────────────────────────────────
+var WALL_HEIGHT = 1.2;
+var WALL_THICK = 0.15;
+var wallMat = new T.MeshStandardMaterial({
+  color: 0xff6b6b, emissive: 0xff4444, emissiveIntensity: 0.15, metalness: 0.2, roughness: 0.4
+});
+
+function makeWall(x, z, angle, len) {
+  var g = new T.BoxGeometry(len, WALL_HEIGHT, WALL_THICK);
+  var m = new T.Mesh(g, wallMat);
+  m.position.set(x, WALL_HEIGHT/2, z);
+  m.rotation.y = angle;
+  m.receiveShadow = true;
+  m.castShadow = true;
+  return m;
+}
+
+var h = ARENA_HALF;
+var wLen = h * 2;
+scene.add(makeWall(0, -h, 0, wLen));
+scene.add(makeWall(0, h, 0, wLen));
+scene.add(makeWall(-h, 0, Math.PI/2, wLen));
+scene.add(makeWall(h, 0, Math.PI/2, wLen));
+
+// ─── Corner Pillars ───────────────────────────────────
+var pillarMat = new T.MeshStandardMaterial({
+  color: 0x4fc3f7, emissive: 0x4fc3f7, emissiveIntensity: 0.3, metalness: 0.3, roughness: 0.2
+});
+var pillarCapMat = new T.MeshStandardMaterial({
+  color: 0x4fc3f7, emissive: 0x4fc3f7, emissiveIntensity: 0.8, metalness: 0.1, roughness: 0.1
+});
+var pillarPos = [[-h, h], [h, h], [-h, -h], [h, -h]];
+pillarPos.forEach(function(p) {
+  var pillar = new T.Mesh(new T.CylinderGeometry(0.25, 0.35, 6, 8), pillarMat);
+  pillar.position.set(p[0], 3, p[1]);
+  pillar.castShadow = true;
+  scene.add(pillar);
+  var cap = new T.Mesh(new T.CylinderGeometry(0.4, 0.25, 0.3, 8), pillarCapMat);
+  cap.position.set(p[0], 6.15, p[1]);
+  scene.add(cap);
+});
+
+// ─── Player ────────────────────────────────────────────
+var playerGroup = new T.Group();
+playerGroup.position.set(0, 0.5, 0);
+
+var coreMat = new T.MeshStandardMaterial({
+  color: 0xe8f4f8, emissive: 0xffffff, emissiveIntensity: 0.6, metalness: 0.1, roughness: 0.2
+});
+var core = new T.Mesh(new T.IcosahedronGeometry(0.35, 0), coreMat);
+core.position.y = 0;
+playerGroup.add(core);
+
+var shellMat = new T.MeshStandardMaterial({
+  color: 0x4fc3f7, emissive: 0x4fc3f7, emissiveIntensity: 0.4,
+  metalness: 0.4, roughness: 0.2, transparent: true, opacity: 0.35
+});
+var shell = new T.Mesh(new T.IcosahedronGeometry(0.7, 0), shellMat);
+shell.position.y = 0;
+playerGroup.add(shell);
+
+var ringMat = new T.MeshStandardMaterial({
+  color: 0x4fc3f7, emissive: 0x4fc3f7, emissiveIntensity: 0.5,
+  metalness: 0.3, roughness: 0.2, transparent: true, opacity: 0.6
+});
+var ring = new T.Mesh(new T.TorusGeometry(0.6, 0.04, 8, 16), ringMat);
+ring.position.y = 0;
+ring.rotation.x = Math.PI / 2;
+playerGroup.add(ring);
+
+var ring2 = new T.Mesh(new T.TorusGeometry(0.6, 0.04, 8, 16), ringMat);
+ring2.position.y = 0;
+ring2.rotation.x = Math.PI / 2;
+ring2.rotation.z = Math.PI / 3;
+playerGroup.add(ring2);
+
+scene.add(playerGroup);
+
+// ─── Trail (Ribbon Mesh) ───────────────────────────────
+var TRAIL_LEN = TRAIL_SEGMENTS;
+var trailData = [];
+for (var i = 0; i < TRAIL_LEN; i++) {
+  trailData.push({ x:0, y:0, z:0 });
+}
+
+// Ribbon mesh: each segment is a quad (2 triangles) connecting trail point pairs
+// Total vertices = (TRAIL_LEN) * 2 (left/right edge points)
+// Total indices = (TRAIL_LEN-1) * 6
+var TRAIL_VERTS = TRAIL_LEN * 2;
+var trailRibbonPos = new Float32Array(TRAIL_VERTS * 3);
+var trailRibbonCol = new Float32Array(TRAIL_VERTS * 3);
+var trailIndices = [];
+for (var i = 0; i < TRAIL_LEN - 1; i++) {
+  var a = i * 2, b = i * 2 + 1;
+  var c = (i + 1) * 2, d = (i + 1) * 2 + 1;
+  // Two triangles: a-b-c and b-c-d
+  trailIndices.push(a, b, c);
+  trailIndices.push(b, d, c);
+}
+
+var trailGeo2 = new T.BufferGeometry();
+trailGeo2.setAttribute('position', new T.BufferAttribute(trailRibbonPos, 3));
+trailGeo2.setAttribute('color', new T.BufferAttribute(trailRibbonCol, 3));
+trailGeo2.setIndex(trailIndices);
+trailGeo2.setDrawRange(0, 0);
+
+var trailMat2 = new T.MeshBasicMaterial({
+  vertexColors: true,
+  blending: T.AdditiveBlending,
+  depthTest: false,
+  transparent: true,
+  opacity: 0.6,
+  side: T.DoubleSide
+});
+var trailMesh = new T.Mesh(trailGeo2, trailMat2);
+trailMesh.frustumCulled = false;
+trailMesh.position.y = 0;
+scene.add(trailMesh);
+
+// ─── Orbs ──────────────────────────────────────────────
+var orbPool = [];
+var orbLightPool = [];
+
+function createOrb() {
+  var g = new T.Group();
+  
+  var bodyMat = new T.MeshStandardMaterial({
+    color: 0xffb74d, emissive: 0xffb74d, emissiveIntensity: 0.5,
+    metalness: 0.2, roughness: 0.3
+  });
+  var body = new T.Mesh(new T.IcosahedronGeometry(0.5, 0), bodyMat);
+  g.add(body);
+  
+  var coreMat2 = new T.MeshStandardMaterial({
+    color: 0xe8f4f8, emissive: 0xffffff, emissiveIntensity: 0.8
+  });
+  var core2 = new T.Mesh(new T.IcosahedronGeometry(0.2, 0), coreMat2);
+  core2.position.y = 0;
+  g.add(core2);
+  
+  var haloMat = new T.MeshStandardMaterial({
+    color: 0xffb74d, emissive: 0xffb74d, emissiveIntensity: 0.3,
+    transparent: true, opacity: 0.2, blending: T.AdditiveBlending,
+    depthWrite: false
+  });
+  var halo = new T.Mesh(new T.SphereGeometry(0.9, 12, 12), haloMat);
+  halo.position.y = 0;
+  g.add(halo);
+  
+  return g;
+}
+
+function spawnOrb() {
+  if (orbPool.length >= ORB_COUNT) return;
+  var g = createOrb();
+  var x = (Math.random() - 0.5) * ARENA_HALF * 1.6;
+  var z = (Math.random() - 0.5) * ARENA_HALF * 1.6;
+  var px = playerGroup.position.x;
+  var pz = playerGroup.position.z;
+  var dx = x - px, dz = z - pz;
+  if (dx*dx + dz*dz < 36) {
+    x += (dx || 1) * 6;
+    z += (dz || 1) * 6;
+  }
+  x = Math.max(-ARENA_HALF+1.5, Math.min(ARENA_HALF-1.5, x));
+  z = Math.max(-ARENA_HALF+1.5, Math.min(ARENA_HALF-1.5, z));
+  g.position.set(x, 0.5, z);
+  scene.add(g);
+  
+  var light = new T.PointLight(0xffb74d, 0.8, 15);
+  light.position.copy(g.position);
+  light.position.y += 1;
+  scene.add(light);
+  
+  orbPool.push(g);
+  orbLightPool.push(light);
+  
+  g.userData = { bobPhase: Math.random() * Math.PI * 2, rotSpeed: 1 + Math.random() * 0.5 };
+}
+
+function removeOrb(idx) {
+  var g = orbPool[idx];
+  var l = orbLightPool[idx];
+  if (g) { scene.remove(g); disposeGroup(g); }
+  if (l) { scene.remove(l); l.dispose && l.dispose(); }
+  orbPool.splice(idx, 1);
+  orbLightPool.splice(idx, 1);
+}
+
+function disposeGroup(g) {
+  g.traverse(function(c) {
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) c.material.dispose();
+  });
+}
+
+// ─── Enemies ───────────────────────────────────────────
+var enemyPool = [];
+
+function createEnemy() {
+  var g = new T.Group();
+  
+  var bodyMat = new T.MeshStandardMaterial({
+    color: 0x4a0000, emissive: 0xff4444, emissiveIntensity: 0.3,
+    metalness: 0.6, roughness: 0.3
+  });
+  var body = new T.Mesh(new T.OctahedronGeometry(0.7, 0), bodyMat);
+  g.add(body);
+  
+  var innerMat = new T.MeshStandardMaterial({
+    color: 0xff6b9d, emissive: 0xff6b9d, emissiveIntensity: 0.5,
+    transparent: true, opacity: 0.6
+  });
+  var inner = new T.Mesh(new T.SphereGeometry(0.35, 8, 8), innerMat);
+  g.add(inner);
+  
+  var spikeMat = new T.MeshStandardMaterial({
+    color: 0x8a0000, emissive: 0xff4444, emissiveIntensity: 0.2
+  });
+  var cone = new T.ConeGeometry(0.08, 0.5, 4);
+  for (var i = 0; i < 6; i++) {
+    var a = i / 6 * Math.PI * 2;
+    var spike = new T.Mesh(cone, spikeMat);
+    spike.position.set(Math.cos(a) * 0.7, 0, Math.sin(a) * 0.7);
+    spike.rotation.y = -a;
+    spike.rotation.x = Math.PI / 2;
+    body.add(spike);
+  }
+  
+  var light = new T.PointLight(0xff6b6b, 0.6, 12);
+  light.position.set(0, 0.5, 0);
+  g.add(light);
+  
+  g.userData = { scale: 0, spawnTime: 0, bodyMat: bodyMat, innerMat: innerMat };
+  return g;
+}
+
+function spawnEnemy() {
+  var g = createEnemy();
+  var side = Math.floor(Math.random() * 4);
+  var pos = ARENA_HALF - 0.5;
+  switch (side) {
+    case 0: g.position.set((Math.random()-0.5)*ARENA_HALF*1.5, 0.5, pos); break;
+    case 1: g.position.set((Math.random()-0.5)*ARENA_HALF*1.5, 0.5, -pos); break;
+    case 2: g.position.set(pos, 0.5, (Math.random()-0.5)*ARENA_HALF*1.5); break;
+    case 3: g.position.set(-pos, 0.5, (Math.random()-0.5)*ARENA_HALF*1.5); break;
+  }
+  g.scale.set(0, 0, 0);
+  g.userData.scale = 0;
+  g.userData.spawnTime = clock;
+  g.userData.speed = 5 + wave * 0.7 + Math.random() * 1.2;
+  scene.add(g);
+  enemyPool.push(g);
+}
+
+function removeEnemy(idx) {
+  var g = enemyPool[idx];
+  if (g) { scene.remove(g); disposeGroup(g); }
+  enemyPool.splice(idx, 1);
+}
+
+// ─── Particles ────────────────────────────────────────
+var particlePool = [];
+var particleGeo, particleMat, particleSystem;
+
+function initParticles() {
+  var count = PARTICLE_POOL;
+  var positions = new Float32Array(count * 3);
+  var velocities = new Float32Array(count * 3);
+  var sizes = new Float32Array(count);
+  var life = new Float32Array(count);
+  var colors = new Float32Array(count * 3);
+  var startLife = new Float32Array(count);
+  
+  particleGeo = new T.BufferGeometry();
+  particleGeo.setAttribute('position', new T.BufferAttribute(positions, 3));
+  particleGeo.setAttribute('size', new T.BufferAttribute(sizes, 1));
+  particleGeo.setAttribute('color', new T.BufferAttribute(colors, 3));
+  particleGeo.setAttribute('life', new T.BufferAttribute(life, 1));
+  particleGeo.setAttribute('startLife', new T.BufferAttribute(startLife, 1));
+  
+  particleMat = new T.ShaderMaterial({
+    uniforms: {
+      uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) }
+    },
+    vertexShader: [
+      'attribute float size;',
+      'attribute vec3 color;',
+      'attribute float life;',
+      'attribute float startLife;',
+      'uniform float uPixelRatio;',
+      'varying vec3 vColor;',
+      'varying float vAlpha;',
+      'void main(){',
+      '  vColor = color;',
+      '  float l = life / max(startLife, 0.001);',
+      '  vAlpha = 1.0 - l;',
+      '  vAlpha = clamp(vAlpha, 0.0, 1.0);',
+      '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+      '  gl_PointSize = size * uPixelRatio * (50.0 / -mv.z);',
+      '  gl_Position = projectionMatrix * mv;',
+      '}'
+    ].join('\n'),
+    fragmentShader: [
+      'precision highp float;',
+      'varying vec3 vColor;',
+      'varying float vAlpha;',
+      'void main(){',
+      '  vec2 uv = gl_PointCoord - vec2(0.5);',
+      '  float d = length(uv);',
+      '  if (d > 0.5) discard;',
+      '  float soft = 1.0 - d * 2.0;',
+      '  gl_FragColor = vec4(vColor, vAlpha * soft);',
+      '}'
+    ].join('\n'),
+    transparent: true, depthWrite: false, blending: T.AdditiveBlending
+  });
+  
+  for (var i = 0; i < count; i++) {
+    particlePool.push({
+      active: false, index: i,
+      pos: new T.Vector3(0, 0, 0),
+      vel: new T.Vector3(0, 0, 0),
+      size: 0, life: 0, startLife: 0,
+      color: new T.Color(0)
+    });
+  }
+  
+  particleSystem = new T.Points(particleGeo, particleMat);
+  particleSystem.frustumCulled = false;
+  scene.add(particleSystem);
+}
+
+initParticles();
+
+function emitParticles(pos, count, color, speed, size) {
+  size = size || 0.3;
+  speed = speed || 3;
+  var emitted = 0;
+  for (var i = 0; i < particlePool.length && emitted < count; i++) {
+    var p = particlePool[i];
+    if (p.active) continue;
+    p.active = true;
+    p.pos.copy(pos);
+    p.vel.set(
+      (Math.random() - 0.5) * speed,
+      Math.random() * speed * 0.8,
+      (Math.random() - 0.5) * speed
+    );
+    p.size = size + Math.random() * 0.2;
+    p.life = 0;
+    p.startLife = 0.6 + Math.random() * 0.4;
+    p.color.copy(color);
+    emitted++;
+  }
+}
+
+// ─── Expanding Rings ──────────────────────────────────
+var ringEffects = [];
+var ringGeo = new T.RingGeometry(0.5, 0.7, 16);
+var ringMat2 = new T.MeshBasicMaterial({
+  color: 0xffffff, transparent: true, opacity: 1,
+  blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide
+});
+
+function spawnRing(pos, color) {
+  var m = new T.Mesh(ringGeo.clone(), ringMat2.clone());
+  m.position.copy(pos);
+  m.position.y = 0.5;
+  m.scale.set(1, 1, 1);
+  m.material.color.copy(color);
+  scene.add(m);
+  ringEffects.push({
+    mesh: m, life: 0, maxLife: 0.8,
+    startScale: 1, endScale: 9
+  });
+}
+
+// ─── Score Popups ──────────────────────────────────────
+var scorePopups = [];
+
+function spawnScorePopup(pos, text) {
+  var el = document.createElement('div');
+  el.className = 'score-popup';
+  el.textContent = text;
+  document.getElementById('hud').appendChild(el);
+  scorePopups.push({
+    el: el, worldPos: pos.clone(),
+    life: 0, maxLife: 1, startY: 0
+  });
+}
+
+// ─── Camera State ─────────────────────────────────────
+var camTarget = new T.Vector3();
+var camLookTarget = new T.Vector3();
+var camShake = new T.Vector3();
+var camShakeIntensity = 0;
+
+// ─── Clock ─────────────────────────────────────────────
+var clock = 0;
+var delta = 0;
+var prevTime = 0;
+
+// ─── Init Orbs ─────────────────────────────────────────
+function initOrbs() {
+  for (var i = orbPool.length - 1; i >= 0; i--) removeOrb(i);
+  for (var i = 0; i < ORB_COUNT; i++) spawnOrb();
+}
+
+// ─── Game Logic ────────────────────────────────────────
+function resetGame() {
+  score = 0;
+  lives = MAX_LIVES;
+  combo = 0;
+  wave = 0;
+  waveTime = 0;
+  boostMeter = 1;
+  isBoosting = false;
+  invulnTimer = 0;
+  isInvuln = false;
+  totalOrbs = 0;
+  survivedTime = 0;
+  gameStartTime = clock;
+  playerGroup.position.set(0, 0.5, 0);
+  playerVel.set(0, 0, 0);
+  playerGroup.rotation.set(0, 0, 0);
+  
+  // Clear enemies
+  while (enemyPool.length) removeEnemy(0);
+  enemySpawnTimer = calcSpawnInterval();
+  
+  // Clear orbs
+  for (var i = orbPool.length - 1; i >= 0; i--) removeOrb(i);
+  initOrbs();
+  
+  // Clear trail
+  var pp = playerGroup.position;
+  for (var i = 0; i < TRAIL_LEN; i++) {
+    trailData[i].x = pp.x;
+    trailData[i].y = pp.y;
+    trailData[i].z = pp.z;
+  }
+  
+  // Clear rings
+  for (var i = ringEffects.length - 1; i >= 0; i--) {
+    var r = ringEffects[i];
+    if (r.mesh) {
+      scene.remove(r.mesh);
+      r.mesh.geometry.dispose();
+      r.mesh.material.dispose();
+    }
+  }
+  ringEffects = [];
+  
+  // Clear popups
+  for (var i = scorePopups.length - 1; i >= 0; i--) {
+    if (scorePopups[i].el) scorePopups[i].el.remove();
+  }
+  scorePopups = [];
+  
+  // Reset particles
+  for (var i = 0; i < particlePool.length; i++) {
+    particlePool[i].active = false;
+  }
+  
+  // Reset HUD
+  displayScore = 0;
+  updateHUD();
+  document.getElementById('go-score').textContent = '0';
+  document.getElementById('go-orbs').textContent = '0';
+  document.getElementById('go-wave').textContent = '0';
+  document.getElementById('go-time').textContent = '0s';
+  updateLives();
+  updateCombo();
+}
+
+// ─── HUD Update ────────────────────────────────────────
+var displayScore = 0;
+function updateHUD() {
+  displayScore += (score - displayScore) * 0.1;
+  var s = Math.round(displayScore);
+  var str = String(s);
+  while (str.length < 4) str = '0' + str;
+  document.getElementById('score').textContent = str;
+}
+
+function updateLives() {
+  var stars = document.querySelectorAll('.life-star');
+  for (var i = 0; i < 3; i++) {
+    if (i < lives) stars[i].classList.remove('lost');
+    else stars[i].classList.add('lost');
+  }
+}
+
+function updateCombo() {
+  var el = document.getElementById('combo');
+  var val = document.getElementById('combo-val');
+  val.textContent = combo;
+  if (combo > 1) el.classList.add('show');
+  else el.classList.remove('show');
+}
+
+function updateWaveTimer() {
+  var pct = waveTime / 20;
+  document.getElementById('wave-timer-fill').style.transform = 'scaleX(' + (1 - pct) + ')';
+}
+
+// ─── Movement ──────────────────────────────────────────
+var playerVel = new T.Vector3(0, 0, 0);
+var playerSpeed = 0;
+
+// ─── Enemy Spawn Timer ────────────────────────────────
+var enemySpawnTimer = 0;
+
+function calcSpawnInterval() {
+  return Math.max(0.45, 2.6 - wave * 0.25);
+}
+
+// ─── Main Loop ─────────────────────────────────────────
+function animate(time) {
+  if (prevTime === 0) prevTime = time || 0;
+  var t = time || 0;
+  delta = Math.min((t - prevTime) / 1000, 0.05);
+  prevTime = t;
+  clock += delta;
+  
+  if (gameState === 'playing') {
+    gameplayUpdate();
+  } else if (gameState === 'menu') {
+    menuUpdate();
+  } else if (gameState === 'gameover') {
+    gameOverTimer += delta;
+    // Continue updating particles and rings briefly for explosion effects
+    updateRings(delta);
+    updateParticles(delta);
+    if (gameOverTimer < 2) {
+      // Keep updating for 2 seconds after death
+    }
+  }
+  
+  renderUpdate();
+  requestAnimationFrame(animate);
+}
+
+// ─── Gameplay Update ───────────────────────────────────
+function gameplayUpdate() {
+  var dt = delta;
+  survivedTime = clock - gameStartTime;
+  
+  // Wave timer
+  waveTime += dt;
+  if (waveTime >= 20) {
+    wave++;
+    waveTime -= 20;
+    // Wave change effect
+    var pos = playerGroup.position.clone();
+    emitParticles(pos, 30, new T.Color(0x4fc3f7), 5, 0.5);
+    spawnRing(pos, new T.Color(0x4fc3f7));
+    groundMat.uniforms.uWave.value = wave;
+  }
+  updateWaveTimer();
+  
+  // Boost
+  var boosting = keys['Shift'] || keys['shift'] || false;
+  if (boosting && boostMeter > 0) {
+    isBoosting = true;
+    boostMeter -= BOOST_DRAIN * dt;
+    if (boostMeter < 0) boostMeter = 0;
+  } else {
+    isBoosting = false;
+    boostMeter += BOOST_RECHARGE * dt;
+    if (boostMeter > 1) boostMeter = 1;
+  }
+  
+  // Movement
+  var camDir = new T.Vector3();
+  camera.getWorldDirection(camDir);
+  camDir.y = 0;
+  camDir.normalize();
+  var camRight = new T.Vector3();
+  camRight.crossVectors(camDir, new T.Vector3(0,1,0));
+  camRight.normalize();
+  
+  var moveFwd = 0, moveSide = 0;
+  if (keys['w'] || keys['W'] || keys['ArrowUp']) moveFwd -= 1;
+  if (keys['s'] || keys['S'] || keys['ArrowDown']) moveFwd += 1;
+  if (keys['a'] || keys['A'] || keys['ArrowLeft']) moveSide -= 1;
+  if (keys['d'] || keys['D'] || keys['ArrowRight']) moveSide += 1;
+  
+  var accelDir = new T.Vector3();
+  accelDir.add(camDir.clone().multiplyScalar(-moveFwd));
+  accelDir.add(camRight.clone().multiplyScalar(moveSide));
+  if (accelDir.length() > 1) accelDir.normalize();
+  
+  var maxSpd = isBoosting ? MAX_SPEED * BOOST_MULT : MAX_SPEED;
+  playerVel.add(accelDir.multiplyScalar(PLAYER_ACCEL * dt));
+  
+  // Friction
+  playerVel.add(playerVel.clone().multiplyScalar(-PLAYER_FRICTION * dt));
+  
+  // Clamp speed
+  var spd = playerVel.length();
+  if (spd > maxSpd) {
+    playerVel.normalize().multiplyScalar(maxSpd);
+  }
+  playerSpeed = playerVel.length();
+  
+  // Move player
+  playerGroup.position.x += playerVel.x * dt;
+  playerGroup.position.z += playerVel.z * dt;
+  
+  // Clamp to arena
+  var half = ARENA_HALF - 0.5;
+  if (playerGroup.position.x > half) { playerGroup.position.x = half; playerVel.x *= -0.5; }
+  if (playerGroup.position.x < -half) { playerGroup.position.x = -half; playerVel.x *= -0.5; }
+  if (playerGroup.position.z > half) { playerGroup.position.z = half; playerVel.z *= -0.5; }
+  if (playerGroup.position.z < -half) { playerGroup.position.z = -half; playerVel.z *= -0.5; }
+  
+  // Smooth rotation
+  if (playerSpeed > 0.5) {
+    var targetAngle = Math.atan2(playerVel.x, playerVel.z);
+    var currentAngle = playerGroup.rotation.y;
+    var diff = targetAngle - currentAngle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    playerGroup.rotation.y += diff * 5 * dt;
+  }
+  
+  // Tilt
+  var tiltTarget = -playerVel.x * 0.15;
+  playerGroup.rotation.z += (tiltTarget - playerGroup.rotation.z) * 3 * dt;
+  
+  // Invulnerability blink
+  if (invulnTimer > 0) {
+    invulnTimer -= dt;
+    isInvuln = true;
+    var blink = Math.sin(clock * 88) > 0;
+    playerGroup.visible = blink;
+    if (invulnTimer <= 0) {
+      invulnTimer = 0;
+      isInvuln = false;
+      playerGroup.visible = true;
+    }
+  }
+  
+  // Trail
+  updateTrail();
+  
+  // Boost particles
+  if (isBoosting && playerSpeed > 1) {
+    var backDir = new T.Vector3();
+    camera.getWorldDirection(backDir);
+    backDir.y = 0;
+    backDir.normalize();
+    backDir.multiplyScalar(-0.5);
+    var bp = playerGroup.position.clone();
+    bp.add(backDir);
+    bp.y = 0.2;
+    emitParticles(bp, 2, new T.Color(0x4fc3f7), 3, 0.25);
+  }
+  
+  // Update orbs
+  updateOrbs(dt);
+  
+  // Update enemies
+  updateEnemies(dt);
+  
+  // Enemy spawning
+  enemySpawnTimer -= dt;
+  if (enemySpawnTimer <= 0) {
+    var maxEnemies = ENEMY_CAP_BASE + wave * 2;
+    if (enemyPool.length < maxEnemies) {
+      spawnEnemy();
+    }
+    var interval = calcSpawnInterval();
+    enemySpawnTimer = interval * (0.7 + Math.random() * 0.6);
+  }
+  
+  // Check orb collection
+  checkOrbCollection();
+  
+  // Check enemy collision
+  checkEnemyCollision();
+  
+  // Update rings
+  updateRings(dt);
+  
+  // Update particles
+  updateParticles(dt);
+  
+  // Update popups
+  updatePopups(dt);
+  
+  // Update lights
+  playerLight.position.copy(playerGroup.position);
+  playerLight.position.y = 2;
+  var plIntensity = 1.5 + playerSpeed * 0.05;
+  if (isBoosting) plIntensity *= 1.5;
+  playerLight.intensity = plIntensity;
+  
+  // Ground shader
+  groundMat.uniforms.uTime.value = clock;
+  groundMat.uniforms.uPlayerPos.value.copy(playerGroup.position);
+  
+  // Camera
+  updateCamera(dt);
+  
+  // HUD
+  updateHUD();
+}
+
+// ─── Trail Update (Ribbon) ─────────────────────────────
+function updateTrail() {
+  // Shift trail data forward
+  for (var i = TRAIL_LEN - 1; i > 0; i--) {
+    trailData[i].x = trailData[i-1].x;
+    trailData[i].y = trailData[i-1].y;
+    trailData[i].z = trailData[i-1].z;
+  }
+  
+  // Set head to player position
+  trailData[0].x = playerGroup.position.x;
+  trailData[0].y = playerGroup.position.y + 0.2;
+  trailData[0].z = playerGroup.position.z;
+  
+  var posAttr = trailGeo2.getAttribute('position');
+  var colAttr = trailGeo2.getAttribute('color');
+  var posArr = posAttr.array;
+  var colArr = colAttr.array;
+  
+  // Build ribbon: for each trail point, create two offset vertices (left/right)
+  // Width: wide at head (0.5), narrow at tail (0.02)
+  var maxW = isBoosting ? 0.7 : 0.5;
+  
+  for (var i = 0; i < TRAIL_LEN; i++) {
+    var t = i / TRAIL_LEN;
+    var w = maxW * (1 - t * 0.98); // width from 0.5 down to ~0.01
+    
+    // Direction from this point to next (or previous if at end)
+    var dx, dz;
+    if (i < TRAIL_LEN - 1) {
+      dx = trailData[i+1].x - trailData[i].x;
+      dz = trailData[i+1].z - trailData[i].z;
+    } else {
+      dx = trailData[i].x - trailData[i-1].x;
+      dz = trailData[i].z - trailData[i-1].z;
+    }
+    // Perpendicular direction (right-hand side)
+    var len = Math.sqrt(dx*dx + dz*dz) || 0.001;
+    var px2 = -dz / len * w;
+    var pz2 = dx / len * w;
+    
+    // Left vertex (index i*2)
+    var li = i * 2;
+    posArr[li*3] = trailData[i].x - px2;
+    posArr[li*3+1] = trailData[i].y;
+    posArr[li*3+2] = trailData[i].z - pz2;
+    
+    // Right vertex (index i*2+1)
+    var ri = i * 2 + 1;
+    posArr[ri*3] = trailData[i].x + px2;
+    posArr[ri*3+1] = trailData[i].y;
+    posArr[ri*3+2] = trailData[i].z + pz2;
+    
+    // Color: cyan fading to transparent toward tail, brighter during boost
+    var bright = isBoosting ? 1.8 : 1.0;
+    var fade = 1 - t;
+    var r = 0.3 * bright * fade;
+    var g = 0.7 * bright * fade;
+    var b = 1.0 * bright * fade * fade;
+    
+    colArr[li*3] = r;
+    colArr[li*3+1] = g;
+    colArr[li*3+2] = b;
+    colArr[ri*3] = r;
+    colArr[ri*3+1] = g;
+    colArr[ri*3+2] = b;
+  }
+  
+  posAttr.needsUpdate = true;
+  colAttr.needsUpdate = true;
+  // Draw all ribbon quads: (TRAIL_LEN-1) * 6 indices
+  trailGeo2.setDrawRange(0, (TRAIL_LEN - 1) * 6);
+}
+
+// ─── Orbs Update ───────────────────────────────────────
+function updateOrbs(dt) {
+  for (var i = 0; i < orbPool.length; i++) {
+    var g = orbPool[i];
+    var phase = g.userData.bobPhase || 0;
+    phase += dt * 2;
+    g.userData.bobPhase = phase;
+    g.position.y = 0.5 + Math.sin(phase) * 0.3;
+    g.rotation.y += dt * (g.userData.rotSpeed || 1);
+    g.rotation.x += dt * 0.3;
+    
+    var pulse = Math.sin(phase * 1.5) * 0.1 + 0.9;
+    g.scale.set(pulse, pulse, pulse);
+    
+    var light = orbLightPool[i];
+    if (light) {
+      light.position.copy(g.position);
+      light.position.y += 0.5;
+    }
+  }
+}
+
+// ─── Enemies Update ────────────────────────────────────
+function updateEnemies(dt) {
+  for (var i = 0; i < enemyPool.length; i++) {
+    var g = enemyPool[i];
+    var ud = g.userData;
+    
+    var spawnTime = clock - ud.spawnTime;
+    var s = Math.min(1, spawnTime / 0.33);
+    ud.scale = s;
+    g.scale.set(s, s, s);
+    
+    if (s < 1) {
+      var pulse = 0.3 + (1 - s) * 0.7;
+      ud.bodyMat.emissiveIntensity = pulse;
+      ud.innerMat.emissiveIntensity = pulse;
+    }
+    
+    if (s > 0.2) {
+      var target = new T.Vector3(
+        playerGroup.position.x,
+        0.5,
+        playerGroup.position.z
+      );
+      var dir = new T.Vector3();
+      dir.copy(target).sub(g.position);
+      var dist = dir.length();
+      if (dist > 0.1) {
+        dir.normalize();
+        var spd = ud.speed || 5;
+        g.position.x += dir.x * spd * dt;
+        g.position.z += dir.z * spd * dt;
+      }
+      
+      // Rotate body (children[0]) independently
+      var body = g.children[0];
+      if (body) {
+        body.rotation.y += dt * 2;
+        body.rotation.x += dt * 1.5;
+      }
+      
+      // Inner (children[1]) rotates opposite
+      var inner = g.children[1];
+      if (inner) {
+        inner.rotation.y -= dt * 3;
+        inner.rotation.x -= dt * 2;
+      }
+      
+      // Face player at group level
+      var lookDir = new T.Vector3(target.x, 0.5, target.z).sub(g.position);
+      if (lookDir.length() > 0.1) {
+        lookDir.normalize();
+        g.rotation.y = Math.atan2(lookDir.x, lookDir.z);
+      }
+    }
+  }
+}
+
+// ─── Orb Collection ────────────────────────────────────
+function checkOrbCollection() {
+  var px = playerGroup.position.x;
+  var pz = playerGroup.position.z;
+  var collected = [];
+  
+  for (var i = 0; i < orbPool.length; i++) {
+    var g = orbPool[i];
+    var dx = px - g.position.x;
+    var dz = pz - g.position.z;
+    if (dx*dx + dz*dz < COLLECT_DIST * COLLECT_DIST) {
+      collected.push(i);
+    }
+  }
+  
+  for (var c = collected.length - 1; c >= 0; c--) {
+    var idx = collected[c];
+    var g = orbPool[idx];
+    var pos = g.position.clone();
+    
+    combo = Math.min(combo + 1, MAX_COMBO);
+    var pts = 10 * combo;
+    score += pts;
+    totalOrbs++;
+    
+    emitParticles(pos, 15, new T.Color(0xffb74d), 4, 0.35);
+    spawnRing(pos, new T.Color(0xffb74d));
+    spawnScorePopup(pos, '+' + pts);
+    
+    camShakeIntensity = 0.15;
+    
+    removeOrb(idx);
+    spawnOrb();
+    updateCombo();
+  }
+}
+
+// ─── Enemy Collision ───────────────────────────────────
+function checkEnemyCollision() {
+  if (isInvuln) return;
+  
+  var px = playerGroup.position.x;
+  var pz = playerGroup.position.z;
+  
+  for (var i = 0; i < enemyPool.length; i++) {
+    var g = enemyPool[i];
+    var ud = g.userData;
+    
+    var spawnTime = clock - ud.spawnTime;
+    if (spawnTime < 0.4) continue;
+    
+    var dx = px - g.position.x;
+    var dz = pz - g.position.z;
+    if (dx*dx + dz*dz < COLLECT_DIST * COLLECT_DIST) {
+      var pos = g.position.clone();
+      pos.y = 0.5;
+      
+      lives--;
+      combo = 0;
+      updateCombo();
+      updateLives();
+      
+      emitParticles(pos, 20, new T.Color(0xff6b6b), 5, 0.4);
+      spawnRing(pos, new T.Color(0xff6b6b));
+      
+      camShakeIntensity = 0.4;
+      
+      var flash = document.getElementById('damage-flash');
+      flash.classList.add('active');
+      setTimeout(function(){ flash.classList.remove('active'); }, 80);
+      
+      var kbDir = new T.Vector3(g.position.x - px, 0, g.position.z - pz);
+      kbDir.normalize();
+      playerVel.add(kbDir.multiplyScalar(8));
+      
+      invulnTimer = 1.5;
+      isInvuln = true;
+      
+      removeEnemy(i);
+      
+      if (lives <= 0) {
+        gameOver();
+      }
+      return;
+    }
+  }
+}
+
+// ─── Game Over ─────────────────────────────────────────
+var gameOverTimer = 0;
+function gameOver() {
+  gameState = 'gameover';
+  gameOverTimer = 0;
+  
+  var pos = playerGroup.position.clone();
+  emitParticles(pos, 80, new T.Color(0x4fc3f7), 10, 0.6);
+  emitParticles(pos, 60, new T.Color(0xe8f4f8), 8, 0.5);
+  spawnRing(pos, new T.Color(0x4fc3f7));
+  
+  document.getElementById('go-score').textContent = score;
+  document.getElementById('go-orbs').textContent = totalOrbs;
+  document.getElementById('go-wave').textContent = wave;
+  var secs = Math.floor(survivedTime);
+  var mins = Math.floor(secs / 60);
+  secs = secs % 60;
+  document.getElementById('go-time').textContent = mins + 'm ' + secs + 's';
+  document.getElementById('gameover-screen').classList.remove('hidden');
+}
+
+// ─── Menu Update ───────────────────────────────────────
+function menuUpdate() {
+  var t = clock * 0.15;
+  var radius = 18;
+  var height = 12;
+  camera.position.x = Math.sin(t) * radius;
+  camera.position.z = Math.cos(t) * radius;
+  camera.position.y = height;
+  camera.lookAt(0, 0, 0);
+  
+  groundMat.uniforms.uTime.value = clock;
+}
+
+// ─── Camera Update ─────────────────────────────────────
+function updateCamera(dt) {
+  var speedFactor = playerSpeed / MAX_SPEED;
+  var dist = 14 + speedFactor * 3;
+  var height = 11 + speedFactor * 1.5;
+  
+  var playerAngle = playerGroup.rotation.y;
+  var behind = new T.Vector3(-Math.sin(playerAngle), 0, -Math.cos(playerAngle));
+  
+  var targetPos = new T.Vector3();
+  targetPos.copy(playerGroup.position);
+  targetPos.add(behind.multiplyScalar(dist));
+  targetPos.y += height;
+  
+  camera.position.lerp(targetPos, 3 * dt);
+  
+  var lookTarget = new T.Vector3();
+  lookTarget.copy(playerGroup.position);
+  lookTarget.add(playerVel.clone().multiplyScalar(0.25));
+  lookTarget.y += 1;
+  
+  var lookDir = lookTarget.clone().sub(camera.position);
+  if (lookDir.length() > 0.001) {
+    var targetQuat = new T.Quaternion();
+    targetQuat.setFromUnitVectors(new T.Vector3(0,0,-1), lookDir.normalize());
+    camera.quaternion.slerp(targetQuat, 5 * dt);
+  }
+  
+  if (camShakeIntensity > 0) {
+    var shakeX = (Math.random() - 0.5) * camShakeIntensity;
+    var shakeY = (Math.random() - 0.5) * camShakeIntensity;
+    camera.position.x += shakeX;
+    camera.position.y += shakeY;
+    camShakeIntensity *= 0.9;
+    if (camShakeIntensity < 0.01) camShakeIntensity = 0;
+  }
+}
+
+// ─── Rings Update ──────────────────────────────────────
+function updateRings(dt) {
+  for (var i = ringEffects.length - 1; i >= 0; i--) {
+    var r = ringEffects[i];
+    r.life += dt;
+    var pct = r.life / r.maxLife;
+    if (pct >= 1) {
+      scene.remove(r.mesh);
+      r.mesh.geometry.dispose();
+      r.mesh.material.dispose();
+      ringEffects.splice(i, 1);
+    } else {
+      var scale = 1 + pct * 8;
+      r.mesh.scale.set(scale, scale, scale);
+      r.mesh.material.opacity = 1 - pct;
+    }
+  }
+}
+
+// ─── Particles Update ──────────────────────────────────
+function updateParticles(dt) {
+  var posAttr = particleGeo.getAttribute('position');
+  var sizeAttr = particleGeo.getAttribute('size');
+  var colAttr = particleGeo.getAttribute('color');
+  var lifeAttr = particleGeo.getAttribute('life');
+  var startLifeAttr = particleGeo.getAttribute('startLife');
+  
+  var posArr = posAttr.array;
+  var sizeArr = sizeAttr.array;
+  var colArr = colAttr.array;
+  var lifeArr = lifeAttr.array;
+  var startLifeArr = startLifeAttr.array;
+  
+  for (var i = 0; i < particlePool.length; i++) {
+    var p = particlePool[i];
+    var i3 = i * 3;
+    
+    if (p.active) {
+      p.life += dt;
+      if (p.life >= p.startLife) {
+        p.active = false;
+        lifeArr[i] = 0;
+        startLifeArr[i] = 0;
+        sizeArr[i] = 0;
+        continue;
+      }
+      
+      p.vel.y += GRAVITY_VAL * dt * 0.5;
+      
+      p.pos.x += p.vel.x * dt;
+      p.pos.y += p.vel.y * dt;
+      p.pos.z += p.vel.z * dt;
+      
+      if (p.pos.y < 0) {
+        p.pos.y = 0;
+        p.vel.y *= -0.3;
+      }
+      
+      posArr[i3] = p.pos.x;
+      posArr[i3+1] = p.pos.y;
+      posArr[i3+2] = p.pos.z;
+      
+      var lifePct = p.life / p.startLife;
+      sizeArr[i] = p.size * (1 - lifePct);
+      
+      var fade = 1 - lifePct;
+      colArr[i3] = p.color.r * fade;
+      colArr[i3+1] = p.color.g * fade;
+      colArr[i3+2] = p.color.b * fade;
+      
+      lifeArr[i] = p.life;
+      startLifeArr[i] = p.startLife;
+    } else {
+      posArr[i3] = 0;
+      posArr[i3+1] = -100;
+      posArr[i3+2] = 0;
+      sizeArr[i] = 0;
+      lifeArr[i] = 0;
+      startLifeArr[i] = 0;
+    }
+  }
+  
+  posAttr.needsUpdate = true;
+  sizeAttr.needsUpdate = true;
+  colAttr.needsUpdate = true;
+  lifeAttr.needsUpdate = true;
+  startLifeAttr.needsUpdate = true;
+}
+
+// ─── Popups Update ─────────────────────────────────────
+function updatePopups(dt) {
+  for (var i = scorePopups.length - 1; i >= 0; i--) {
+    var p = scorePopups[i];
+    p.life += dt;
+    if (p.life >= p.maxLife) {
+      p.el.remove();
+      scorePopups.splice(i, 1);
+    } else {
+      var pct = p.life / p.maxLife;
+      var pos = p.worldPos.clone();
+      pos.y += 0.5;
+      var projected = pos.clone();
+      projected.project(camera);
+      var x = (projected.x * 0.5 + 0.5) * window.innerWidth;
+      var y = (1 - projected.y * 0.5 - 0.5) * window.innerHeight;
+      p.el.style.left = x + 'px';
+      p.el.style.top = (y - p.life * 80) + 'px';
+      p.el.style.opacity = 1 - pct;
+    }
+  }
+}
+
+// ─── Render Update ─────────────────────────────────────
+function renderUpdate() {
+  renderer.render(scene, camera);
+}
+
+// ─── Events ────────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  keys[e.key] = true;
+  keys[e.code] = true;
+  if (e.key === ' ' || e.key === 'Space') {
+    e.preventDefault();
+    if (gameState === 'menu') startGame();
+  }
+  if (e.key === 'r' || e.key === 'R') {
+    if (gameState === 'gameover') startGame();
+  }
+});
+
+document.addEventListener('keyup', function(e) {
+  keys[e.key] = false;
+  keys[e.code] = false;
+});
+
+document.getElementById('start-btn').addEventListener('click', function() {
+  if (gameState === 'menu') startGame();
+});
+
+document.getElementById('restart-btn').addEventListener('click', function() {
+  if (gameState === 'gameover') startGame();
+});
+
+document.addEventListener('touchstart', function() {
+  if (gameState === 'menu') startGame();
+  if (gameState === 'gameover') startGame();
+});
+
+// ─── Start Game ────────────────────────────────────────
+function startGame() {
+  gameState = 'playing';
+  document.getElementById('start-screen').classList.add('hidden');
+  document.getElementById('gameover-screen').classList.add('hidden');
+  resetGame();
+  enemySpawnTimer = calcSpawnInterval();
+  gameStartTime = clock;
+}
+
+// ─── Resize ────────────────────────────────────────────
+window.addEventListener('resize', function() {
+  var w = window.innerWidth;
+  var h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  if (particleMat) {
+    particleMat.uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio, 2);
+  }
+});
+
+// ─── Start ─────────────────────────────────────────────
+resetGame();
+animate(0);
+
+})();
+</script>
+</body>
+</html>
