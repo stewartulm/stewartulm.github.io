@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arena Combat</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; background: #0a0a0f; font-family: 'Inter', sans-serif; }
+canvas { display: block; }
+
+#hud {
+  position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 40px; align-items: center;
+  z-index: 10; pointer-events: none;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px; padding: 10px 28px;
+  font-size: 18px; color: #fff;
+  transition: opacity 0.3s;
+}
+.hud-item { display: flex; align-items: center; gap: 8px; }
+.hud-icon { font-size: 20px; }
+.hud-score { font-weight: 700; font-size: 22px; color: #f0d060; min-width: 40px; text-align: center; }
+.hud-lives { font-weight: 700; font-size: 22px; color: #ff6b6b; min-width: 30px; text-align: center; }
+.hud-label { font-size: 13px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; }
+.hud-sep { width: 1px; height: 24px; background: rgba(255,255,255,0.1); }
+.hud-difficulty { font-size: 13px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 1px; min-width: 60px; text-align: center; }
+
+#gameover {
+  position: fixed; inset: 0; z-index: 20;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.85); backdrop-filter: blur(12px);
+  color: #fff; text-align: center;
+}
+#gameover.show { display: flex; }
+#gameover h1 {
+  font-size: 64px; font-weight: 900;
+  background: linear-gradient(135deg, #ff6b6b, #ff8e8e);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  margin-bottom: 8px;
+}
+#gameover .sub { font-size: 18px; color: rgba(255,255,255,0.5); margin-bottom: 32px; }
+#gameover .final-score { font-size: 36px; font-weight: 700; color: #f0d060; margin-bottom: 8px; }
+#gameover .final-lives { font-size: 16px; color: rgba(255,255,255,0.4); margin-bottom: 40px; }
+#gameover .restart-btn {
+  padding: 14px 48px; border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 12px; background: rgba(255,255,255,0.05);
+  color: #fff; font-size: 18px; font-family: 'Inter', sans-serif;
+  cursor: pointer; transition: all 0.3s; pointer-events: auto;
+}
+#gameover .restart-btn:hover {
+  background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.4);
+  transform: scale(1.05);
+}
+#gameover .restart-hint { font-size: 14px; color: rgba(255,255,255,0.25); margin-top: 16px; }
+
+#damage-overlay {
+  position: fixed; inset: 0; z-index: 15;
+  pointer-events: none;
+  background: transparent;
+  transition: background 0.08s;
+}
+#damage-overlay.hit {
+  background: rgba(255,0,0,0.3);
+}
+
+#score-popup {
+  position: fixed; z-index: 12;
+  pointer-events: none;
+  font-size: 28px; font-weight: 900;
+  color: #f0d060;
+  text-shadow: 0 0 20px rgba(240,208,96,0.6);
+  opacity: 0;
+  transition: all 0.5s ease-out;
+}
+#score-popup.show {
+  opacity: 1;
+  transform: translateY(-20px);
+}
+
+@media (max-width: 600px) {
+  #hud { gap: 16px; padding: 8px 16px; font-size: 14px; }
+  #gameover h1 { font-size: 42px; }
+}
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="hud-item">
+    <span class="hud-icon">✦</span>
+    <span class="hud-label">Score</span>
+    <span class="hud-score" id="score-display">0</span>
+  </div>
+  <div class="hud-sep"></div>
+  <div class="hud-item">
+    <span class="hud-icon">♥</span>
+    <span class="hud-label">Lives</span>
+    <span class="hud-lives" id="lives-display">3</span>
+  </div>
+  <div class="hud-sep"></div>
+  <div class="hud-item">
+    <span class="hud-difficulty" id="difficulty-display">Easy</span>
+  </div>
+</div>
+
+<div id="damage-overlay"></div>
+<div id="score-popup">+10</div>
+
+<div id="gameover">
+  <h1>GAME OVER</h1>
+  <div class="sub">The arena has claimed you.</div>
+  <div class="final-score" id="final-score">Score: 0</div>
+  <div class="final-lives" id="final-lives"></div>
+  <button class="restart-btn" id="restart-btn">PLAY AGAIN</button>
+  <div class="restart-hint">or press SPACE / ENTER</div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ─── DOM refs ───
+  const scoreEl = document.getElementById('score-display');
+  const livesEl = document.getElementById('lives-display');
+  const diffEl = document.getElementById('difficulty-display');
+  const gameoverEl = document.getElementById('gameover');
+  const finalScoreEl = document.getElementById('final-score');
+  const finalLivesEl = document.getElementById('final-lives');
+  const restartBtn = document.getElementById('restart-btn');
+  const damageOverlay = document.getElementById('damage-overlay');
+  const scorePopup = document.getElementById('score-popup');
+
+  // ─── Scene setup ───
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a1a);
+  scene.fog = new THREE.Fog(0x0a0a1a, 30, 70);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  document.body.prepend(renderer.domElement);
+
+  // ─── Lights ───
+  const ambient = new THREE.AmbientLight(0x404060, 0.4);
+  scene.add(ambient);
+
+  const hemi = new THREE.HemisphereLight(0x8888ff, 0x443366, 0.6);
+  scene.add(hemi);
+
+  const dirLight = new THREE.DirectionalLight(0xffe8cc, 1.8);
+  dirLight.position.set(20, 30, 10);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 1024;
+  dirLight.shadow.mapSize.height = 1024;
+  dirLight.shadow.camera.near = 0.1;
+  dirLight.shadow.camera.far = 60;
+  dirLight.shadow.camera.left = -30;
+  dirLight.shadow.camera.right = 30;
+  dirLight.shadow.camera.top = 30;
+  dirLight.shadow.camera.bottom = -30;
+  scene.add(dirLight);
+
+  const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+  fillLight.position.set(-10, 20, -10);
+  scene.add(fillLight);
+
+  const rimLight = new THREE.DirectionalLight(0xff8844, 0.2);
+  rimLight.position.set(-10, 5, -20);
+  scene.add(rimLight);
+
+  // ─── Arena ───
+  const ARENA_SIZE = 30;
+  const HALF = ARENA_SIZE / 2;
+
+  // Ground
+  const groundGeo = new THREE.PlaneGeometry(ARENA_SIZE, ARENA_SIZE);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a2e,
+    roughness: 0.8,
+    metalness: 0.1,
+  });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.01;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Grid pattern on ground
+  const gridMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2a4a,
+    roughness: 0.9,
+    metalness: 0.0,
+    transparent: true,
+    opacity: 0.3,
+  });
+  const gridHelper = new THREE.GridHelper(ARENA_SIZE, 30, 0x444488, 0x333366);
+  gridHelper.position.y = 0.01;
+  gridHelper.material.transparent = true;
+  gridHelper.material.opacity = 0.25;
+  scene.add(gridHelper);
+
+  // Arena border walls
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2a4a,
+    roughness: 0.5,
+    metalness: 0.3,
+    transparent: true,
+    opacity: 0.4,
+  });
+  const wallHeight = 0.5;
+  const wallDepth = 0.1;
+  const walls = [
+    { pos: [0, wallHeight/2, HALF], size: [ARENA_SIZE, wallHeight, wallDepth] },
+    { pos: [0, wallHeight/2, -HALF], size: [ARENA_SIZE, wallHeight, wallDepth] },
+    { pos: [HALF, wallHeight/2, 0], size: [wallDepth, wallHeight, ARENA_SIZE] },
+    { pos: [-HALF, wallHeight/2, 0], size: [wallDepth, wallHeight, ARENA_SIZE] },
+  ];
+  walls.forEach(w => {
+    const geo = new THREE.BoxGeometry(...w.size);
+    const mesh = new THREE.Mesh(geo, wallMat);
+    mesh.position.set(...w.pos);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+  });
+
+  // Corner posts with glow
+  const postMat = new THREE.MeshStandardMaterial({
+    color: 0x444488,
+    emissive: 0x4444aa,
+    emissiveIntensity: 0.3,
+    roughness: 0.3,
+    metalness: 0.6,
+  });
+  const postPositions = [
+    [HALF, 0.5, HALF], [HALF, 0.5, -HALF],
+    [-HALF, 0.5, HALF], [-HALF, 0.5, -HALF]
+  ];
+  postPositions.forEach(p => {
+    const geo = new THREE.CylinderGeometry(0.08, 0.08, 1, 8);
+    const mesh = new THREE.Mesh(geo, postMat);
+    mesh.position.set(...p);
+    mesh.castShadow = true;
+    scene.add(mesh);
+
+    // Point light at corners
+    const pl = new THREE.PointLight(0x6666ff, 0.2, 3);
+    pl.position.set(p[0], 0.8, p[2]);
+    scene.add(pl);
+  });
+
+  // ─── Player ───
+  const PLAYER_RADIUS = 0.4;
+  const PLAYER_HEIGHT = 0.8;
+  const PLAYER_SPEED = 8;
+  const PLAYER_FRICTION = 0.88;
+  const PLAYER_MASS = 1.0;
+
+  const playerGroup = new THREE.Group();
+
+  // Body
+  const bodyGeo = new THREE.CylinderGeometry(PLAYER_RADIUS, PLAYER_RADIUS*0.9, PLAYER_HEIGHT, 12);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0x4488ff,
+    roughness: 0.2,
+    metalness: 0.7,
+    emissive: 0x2244aa,
+    emissiveIntensity: 0.2,
+  });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = PLAYER_HEIGHT / 2;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  playerGroup.add(body);
+
+  // Glow ring
+  const ringGeo = new THREE.TorusGeometry(PLAYER_RADIUS*1.3, 0.04, 8, 16);
+  const ringMat = new THREE.MeshStandardMaterial({
+    color: 0x88bbff,
+    emissive: 0x4488ff,
+    emissiveIntensity: 0.6,
+    transparent: true,
+    opacity: 0.6,
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.05;
+  playerGroup.add(ring);
+
+  // Top glow dome
+  const domeGeo = new THREE.SphereGeometry(PLAYER_RADIUS*0.7, 8, 8);
+  const domeMat = new THREE.MeshStandardMaterial({
+    color: 0x88ccff,
+    emissive: 0x4488ff,
+    emissiveIntensity: 0.4,
+    transparent: true,
+    opacity: 0.3,
+  });
+  const dome = new THREE.Mesh(domeGeo, domeMat);
+  dome.position.y = PLAYER_HEIGHT * 0.85;
+  playerGroup.add(dome);
+
+  // Player light
+  const playerLight = new THREE.PointLight(0x4488ff, 0.4, 6);
+  playerLight.position.y = 0.5;
+  playerGroup.add(playerLight);
+
+  playerGroup.position.set(0, 0, 0);
+  scene.add(playerGroup);
+
+  // ─── Particles ───
+  const particleCount = 400;
+  const particleGeo = new THREE.BufferGeometry();
+  const posArr = new Float32Array(particleCount * 3);
+  const sizeArr = new Float32Array(particleCount);
+  const alphaArr = new Float32Array(particleCount);
+  for (let i = 0; i < particleCount; i++) {
+    posArr[i*3] = (Math.random() - 0.5) * ARENA_SIZE;
+    posArr[i*3+1] = Math.random() * 4;
+    posArr[i*3+2] = (Math.random() - 0.5) * ARENA_SIZE;
+    sizeArr[i] = Math.random() * 0.08 + 0.02;
+    alphaArr[i] = Math.random() * 0.5 + 0.1;
+  }
+  particleGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  particleGeo.setAttribute('size', new THREE.BufferAttribute(sizeArr, 1));
+  particleGeo.setAttribute('alpha', new THREE.BufferAttribute(alphaArr, 1));
+
+  const particleTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(8,8,0,8,8,8);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,16,16);
+    return new THREE.CanvasTexture(c);
+  })();
+
+  const particleMat = new THREE.PointsMaterial({
+    map: particleTex,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    transparent: true,
+    color: 0x8888ff,
+    opacity: 0.6,
+    size: 0.08,
+  });
+  const particles = new THREE.Points(particleGeo, particleMat);
+  scene.add(particles);
+
+  // ─── Game state ───
+  let score = 0;
+  let lives = 3;
+  let gameOver = false;
+  let difficulty = 0;
+  let gameTime = 0;
+  let difficultyLevel = 0;
+
+  const keys = { w: false, a: false, s: false, d: false };
+  const playerVel = new THREE.Vector3();
+
+  // ─── Orbs ───
+  const ORB_RADIUS = 0.3;
+  const orbMat = new THREE.MeshStandardMaterial({
+    color: 0xf0d060,
+    emissive: 0xffaa44,
+    emissiveIntensity: 0.6,
+    roughness: 0.1,
+    metalness: 0.2,
+  });
+  const orbGeo = new THREE.SphereGeometry(ORB_RADIUS, 12, 12);
+
+  let orb = null;
+
+  function spawnOrb() {
+    if (orb) {
+      scene.remove(orb);
+      orb.geometry.dispose();
+    }
+    // Spawn away from player
+    let x, z;
+    do {
+      x = (Math.random() - 0.5) * (ARENA_SIZE - 2);
+      z = (Math.random() - 0.5) * (ARENA_SIZE - 2);
+    } while (Math.sqrt(x*x + z*z) < 3);
+
+    const mesh = new THREE.Mesh(orbGeo.clone(), orbMat.clone());
+    mesh.position.set(x, ORB_RADIUS + 0.2, z);
+    mesh.castShadow = true;
+
+    // Glow halo
+    const haloGeo = new THREE.SphereGeometry(ORB_RADIUS * 2.5, 8, 8);
+    const haloMat = new THREE.MeshStandardMaterial({
+      color: 0xffaa44,
+      emissive: 0xffaa44,
+      emissiveIntensity: 0.3,
+      transparent: true,
+      opacity: 0.15,
+    });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.position.copy(mesh.position);
+    mesh.userData.halo = halo;
+    scene.add(halo);
+
+    // Orb light
+    const light = new THREE.PointLight(0xffaa44, 0.3, 4);
+    light.position.copy(mesh.position);
+    light.position.y += 0.3;
+    mesh.userData.light = light;
+    scene.add(light);
+
+    scene.add(mesh);
+    orb = mesh;
+  }
+
+  // ─── Enemies ───
+  const ENEMY_RADIUS = 0.35;
+  const enemyMat = new THREE.MeshStandardMaterial({
+    color: 0xff4444,
+    emissive: 0xff2222,
+    emissiveIntensity: 0.3,
+    roughness: 0.3,
+    metalness: 0.4,
+  });
+  const enemyGeo = new THREE.OctahedronGeometry(ENEMY_RADIUS, 1);
+
+  const enemies = [];
+  const MAX_ENEMIES = 30;
+  let enemySpawnTimer = 0;
+  let enemySpawnInterval = 2.0;
+
+  function spawnEnemy() {
+    if (enemies.length >= MAX_ENEMIES) return;
+
+    // Spawn at arena edge
+    const side = Math.floor(Math.random() * 4);
+    let x, z;
+    switch (side) {
+      case 0: x = HALF - 0.5; z = (Math.random() - 0.5) * (ARENA_SIZE - 2); break;
+      case 1: x = -HALF + 0.5; z = (Math.random() - 0.5) * (ARENA_SIZE - 2); break;
+      case 2: x = (Math.random() - 0.5) * (ARENA_SIZE - 2); z = HALF - 0.5; break;
+      case 3: x = (Math.random() - 0.5) * (ARENA_SIZE - 2); z = -HALF + 0.5; break;
+    }
+
+    const mesh = new THREE.Mesh(enemyGeo.clone(), enemyMat.clone());
+    mesh.position.set(x, ENEMY_RADIUS + 0.05, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    // Glow
+    const eHaloGeo = new THREE.SphereGeometry(ENEMY_RADIUS * 2, 8, 8);
+    const eHaloMat = new THREE.MeshStandardMaterial({
+      color: 0xff4444,
+      emissive: 0xff2222,
+      emissiveIntensity: 0.2,
+      transparent: true,
+      opacity: 0.12,
+    });
+    const halo = new THREE.Mesh(eHaloGeo, eHaloMat);
+    halo.position.copy(mesh.position);
+    mesh.userData.halo = halo;
+    scene.add(halo);
+
+    // Light
+    const light = new THREE.PointLight(0xff4444, 0.15, 3);
+    light.position.copy(mesh.position);
+    light.position.y += 0.3;
+    mesh.userData.light = light;
+    scene.add(light);
+
+    // Enemy data
+    const speed = 2.5 + difficulty * 0.3 + Math.random() * 0.5;
+    const enemy = {
+      mesh,
+      speed,
+      wobblePhase: Math.random() * Math.PI * 2,
+      wobbleAmp: 0.02,
+      alive: true,
+    };
+    enemies.push(enemy);
+  }
+
+  function removeEnemy(enemy) {
+    if (enemy.mesh.userData.halo) scene.remove(enemy.mesh.userData.halo);
+    if (enemy.mesh.userData.light) scene.remove(enemy.mesh.userData.light);
+    scene.remove(enemy.mesh);
+    enemy.mesh.geometry.dispose();
+    enemy.alive = false;
+  }
+
+  // ─── Collision helpers ───
+  function dist2(a, b) {
+    const dx = a.x - b.x;
+    const dz = a.z - b.z;
+    return dx*dx + dz*dz;
+  }
+
+  function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+  // ─── Screen shake ───
+  let shakeAmount = 0;
+  let shakeDecay = 0.92;
+
+  // ─── Score popup ───
+  function showScorePopup() {
+    scorePopup.classList.add('show');
+    scorePopup.style.left = (window.innerWidth/2 - 30) + 'px';
+    scorePopup.style.top = (window.innerHeight/2 - 40) + 'px';
+    scorePopup.style.transform = 'translateY(0)';
+    setTimeout(() => {
+      scorePopup.classList.remove('show');
+    }, 600);
+  }
+
+  // ─── Damage flash ───
+  function flashDamage() {
+    damageOverlay.classList.add('hit');
+    setTimeout(() => damageOverlay.classList.remove('hit'), 150);
+  }
+
+  // ─── Game logic ───
+  function collectOrb() {
+    if (!orb) return;
+    score += 10;
+    updateHUD();
+    showScorePopup();
+    // Juice: scale pulse
+    orb.scale.set(1.5, 1.5, 1.5);
+    // Remove orb after brief delay
+    setTimeout(() => {
+      if (orb) {
+        if (orb.userData.halo) scene.remove(orb.userData.halo);
+        if (orb.userData.light) scene.remove(orb.userData.light);
+        scene.remove(orb);
+        orb = null;
+      }
+      spawnOrb();
+    }, 200);
+  }
+
+  function takeDamage() {
+    if (gameOver) return;
+    lives--;
+    updateHUD();
+    flashDamage();
+    shakeAmount = 0.3;
+
+    if (lives <= 0) {
+      gameOver = true;
+      showGameOver();
+    }
+  }
+
+  function updateHUD() {
+    scoreEl.textContent = score;
+    livesEl.textContent = lives;
+    const diffNames = ['Easy', 'Normal', 'Hard', 'Insane', 'Nightmare'];
+    const level = Math.min(difficultyLevel, diffNames.length - 1);
+    diffEl.textContent = diffNames[level];
+  }
+
+  function showGameOver() {
+    finalScoreEl.textContent = 'Score: ' + score;
+    finalLivesEl.textContent = '';
+    gameoverEl.classList.add('show');
+  }
+
+  function restartGame() {
+    gameOver = false;
+    score = 0;
+    lives = 3;
+    difficulty = 0;
+    gameTime = 0;
+    difficultyLevel = 0;
+    enemySpawnInterval = 2.0;
+    playerVel.set(0, 0, 0);
+    playerGroup.position.set(0, 0, 0);
+    gameoverEl.classList.remove('show');
+
+    // Clear enemies
+    enemies.forEach(e => {
+      if (e.mesh.userData.halo) scene.remove(e.mesh.userData.halo);
+      if (e.mesh.userData.light) scene.remove(e.mesh.userData.light);
+      scene.remove(e.mesh);
+      e.mesh.geometry.dispose();
+    });
+    enemies.length = 0;
+
+    // Remove orb
+    if (orb) {
+      if (orb.userData.halo) scene.remove(orb.userData.halo);
+      if (orb.userData.light) scene.remove(orb.userData.light);
+      scene.remove(orb);
+      orb = null;
+    }
+
+    spawnOrb();
+    updateHUD();
+  }
+
+  // ─── Input ───
+  document.addEventListener('keydown', e => {
+    const key = e.key.toLowerCase();
+    if (key === 'w' || key === 'arrowup') { keys.w = true; e.preventDefault(); }
+    if (key === 'a' || key === 'arrowleft') { keys.a = true; e.preventDefault(); }
+    if (key === 's' || key === 'arrowdown') { keys.s = true; e.preventDefault(); }
+    if (key === 'd' || key === 'arrowright') { keys.d = true; e.preventDefault(); }
+    if ((key === ' ' || key === 'enter') && gameOver) {
+      e.preventDefault();
+      restartGame();
+    }
+  });
+  document.addEventListener('keyup', e => {
+    const key = e.key.toLowerCase();
+    if (key === 'w' || key === 'arrowup') keys.w = false;
+    if (key === 'a' || key === 'arrowleft') keys.a = false;
+    if (key === 's' || key === 'arrowdown') keys.s = false;
+    if (key === 'd' || key === 'arrowright') keys.d = false;
+  });
+  restartBtn.addEventListener('click', restartGame);
+
+  // ─── Resize ───
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ─── Camera orbit ───
+  let camAngle = 0;
+
+  // ─── Animation ───
+  const clock = new THREE.Clock();
+
+  function animate() {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    if (!gameOver) gameTime += dt;
+
+    // ── Difficulty ramp ──
+    if (!gameOver) {
+      difficulty = Math.min(gameTime / 30, 3.0);
+      difficultyLevel = Math.floor(difficulty / 0.75);
+      enemySpawnInterval = Math.max(0.3, 2.0 - difficulty * 0.4);
+      // Enemy speed increases with difficulty
+    }
+
+    // ── Player movement ──
+    if (!gameOver) {
+      const moveDir = new THREE.Vector3();
+      if (keys.w) moveDir.z -= 1;
+      if (keys.s) moveDir.z += 1;
+      if (keys.a) moveDir.x -= 1;
+      if (keys.d) moveDir.x += 1;
+
+      if (moveDir.length() > 0) {
+        moveDir.normalize();
+        // Camera-relative: rotate by camera angle
+        const angle = camAngle;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const worldDir = new THREE.Vector3(
+          moveDir.x * cos - moveDir.z * sin,
+          0,
+          moveDir.x * sin + moveDir.z * cos
+        );
+        playerVel.x += worldDir.x * PLAYER_SPEED * dt;
+        playerVel.z += worldDir.z * PLAYER_SPEED * dt;
+      }
+
+      // Friction
+      playerVel.x *= PLAYER_FRICTION;
+      playerVel.z *= PLAYER_FRICTION;
+
+      // Clamp speed
+      const maxSpeed = PLAYER_SPEED;
+      const speed = Math.sqrt(playerVel.x*playerVel.x + playerVel.z*playerVel.z);
+      if (speed > maxSpeed) {
+        const scale = maxSpeed / speed;
+        playerVel.x *= scale;
+        playerVel.z *= scale;
+      }
+
+      // Apply velocity
+      playerGroup.position.x += playerVel.x * dt;
+      playerGroup.position.z += playerVel.z * dt;
+
+      // Arena bounds
+      playerGroup.position.x = clamp(playerGroup.position.x, -HALF + PLAYER_RADIUS, HALF - PLAYER_RADIUS);
+      playerGroup.position.z = clamp(playerGroup.position.z, -HALF + PLAYER_RADIUS, HALF - PLAYER_RADIUS);
+
+      // Player bob
+      const bobSpeed = Math.sqrt(playerVel.x*playerVel.x + playerVel.z*playerVel.z);
+      const bob = bobSpeed > 0.1 ? Math.sin(gameTime * 8) * 0.02 : 0;
+      playerGroup.position.y = bob;
+
+      // Player rotation toward movement direction
+      if (bobSpeed > 0.1) {
+        const targetAngle = Math.atan2(playerVel.x, playerVel.z);
+        const current = playerGroup.rotation.y;
+        let diff = targetAngle - current;
+        if (diff > Math.PI) diff -= Math.PI * 2;
+        if (diff < -Math.PI) diff += Math.PI * 2;
+        playerGroup.rotation.y += diff * 0.1;
+      }
+    }
+
+    // ── Spawn enemies ──
+    if (!gameOver) {
+      enemySpawnTimer += dt;
+      if (enemySpawnTimer >= enemySpawnInterval && enemies.length < MAX_ENEMIES) {
+        spawnEnemy();
+        enemySpawnTimer = 0;
+      }
+    }
+
+    // ── Update enemies ──
+    const playerPos = playerGroup.position;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      if (!e.alive) { enemies.splice(i, 1); continue; }
+
+      // Move toward player
+      const dx = playerPos.x - e.mesh.position.x;
+      const dz = playerPos.z - e.mesh.position.z;
+      const dist = Math.sqrt(dx*dx + dz*dz);
+      if (dist > 0.01) {
+        const speed = e.speed + difficulty * 0.2;
+        e.mesh.position.x += (dx / dist) * speed * dt;
+        e.mesh.position.z += (dz / dist) * speed * dt;
+      }
+
+      // Wobble
+      e.wobblePhase += dt * 4;
+      e.mesh.position.y = ENEMY_RADIUS + 0.05 + Math.sin(e.wobblePhase) * e.wobbleAmp;
+
+      // Rotate
+      e.mesh.rotation.x += dt * 2;
+      e.mesh.rotation.y += dt * 3;
+
+      // Update halo/light
+      if (e.mesh.userData.halo) {
+        e.mesh.userData.halo.position.copy(e.mesh.position);
+        e.mesh.userData.halo.position.y += 0.05;
+      }
+      if (e.mesh.userData.light) {
+        e.mesh.userData.light.position.copy(e.mesh.position);
+        e.mesh.userData.light.position.y += 0.3;
+      }
+
+      // Collision with player
+      if (dist < PLAYER_RADIUS + ENEMY_RADIUS) {
+        takeDamage();
+        // Remove this enemy with burst effect
+        const pos = e.mesh.position.clone();
+        removeEnemy(e);
+        enemies.splice(i, 1);
+
+        // Burst particles
+        for (let j = 0; j < 8; j++) {
+          const pGeo = new THREE.SphereGeometry(0.03, 4, 4);
+          const pMat = new THREE.MeshStandardMaterial({
+            color: 0xff4444,
+            emissive: 0xff2222,
+            emissiveIntensity: 0.8,
+          });
+          const p = new THREE.Mesh(pGeo, pMat);
+          p.position.copy(pos);
+          p.position.x += (Math.random() - 0.5) * 0.5;
+          p.position.z += (Math.random() - 0.5) * 0.5;
+          p.position.y += Math.random() * 0.3;
+          scene.add(p);
+          const vel = new THREE.Vector3(
+            (Math.random() - 0.5) * 2,
+            Math.random() * 2,
+            (Math.random() - 0.5) * 2
+          );
+          let life = 0.3;
+          const updateP = () => {
+            life -= dt;
+            p.position.add(vel.clone().multiplyScalar(dt));
+            vel.y -= 3 * dt;
+            if (life <= 0) { scene.remove(p); p.geometry.dispose(); }
+            else requestAnimationFrame(updateP);
+          };
+          updateP();
+        }
+      }
+    }
+
+    // ── Orb update ──
+    if (orb && !gameOver) {
+      // Gentle float
+      orb.position.y = ORB_RADIUS + 0.2 + Math.sin(gameTime * 2) * 0.08;
+      orb.rotation.y += dt * 1.5;
+
+      // Scale back from collection pulse
+      orb.scale.x += (1 - orb.scale.x) * 0.1;
+      orb.scale.y += (1 - orb.scale.y) * 0.1;
+      orb.scale.z += (1 - orb.scale.z) * 0.1;
+
+      // Update halo
+      if (orb.userData.halo) {
+        orb.userData.halo.position.copy(orb.position);
+        orb.userData.halo.position.y -= 0.05;
+      }
+      if (orb.userData.light) {
+        orb.userData.light.position.copy(orb.position);
+        orb.userData.light.position.y += 0.3;
+      }
+
+      // Collision with player
+      const dist = Math.sqrt(dist2(playerPos, orb.position));
+      if (dist < PLAYER_RADIUS + ORB_RADIUS + 0.3) {
+        collectOrb();
+      }
+    }
+
+    // ── Camera ──
+    const camOffset = new THREE.Vector3(0, 3, 6);
+    const targetPos = new THREE.Vector3(
+      playerPos.x + camOffset.x,
+      playerPos.y + camOffset.y,
+      playerPos.z + camOffset.z
+    );
+
+    // Smooth follow
+    camera.position.x += (targetPos.x - camera.position.x) * 0.08;
+    camera.position.y += (targetPos.y - camera.position.y) * 0.08;
+    camera.position.z += (targetPos.z - camera.position.z) * 0.08;
+
+    // Look at player with slight offset
+    const lookTarget = new THREE.Vector3(playerPos.x, playerPos.y + 0.5, playerPos.z);
+    camera.lookAt(lookTarget);
+
+    // Camera angle for movement
+    camAngle = Math.atan2(camera.position.x - playerPos.x, camera.position.z - playerPos.z);
+
+    // ── Screen shake ──
+    if (shakeAmount > 0.001) {
+      camera.position.x += (Math.random() - 0.5) * shakeAmount;
+      camera.position.y += (Math.random() - 0.5) * shakeAmount * 0.5;
+      camera.position.z += (Math.random() - 0.5) * shakeAmount;
+      shakeAmount *= shakeDecay;
+    } else {
+      shakeAmount = 0;
+    }
+
+    // ── Particles ──
+    const pPos = particles.geometry.attributes.position.array;
+    for (let i = 0; i < particleCount; i++) {
+      pPos[i*3+1] -= dt * 0.3;
+      if (pPos[i*3+1] < 0) {
+        pPos[i*3+1] = 4;
+        pPos[i*3] = (Math.random() - 0.5) * ARENA_SIZE;
+        pPos[i*3+2] = (Math.random() - 0.5) * ARENA_SIZE;
+      }
+    }
+    particles.geometry.attributes.position.needsUpdate = true;
+    particles.rotation.y += dt * 0.02;
+
+    // ── Render ──
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+
+  // ─── Start ───
+  spawnOrb();
+  updateHUD();
+  animate();
+
+  // ─── Touch support for mobile ───
+  let touchStartX = 0, touchStartY = 0;
+  document.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  });
+  document.addEventListener('touchmove', e => {
+    if (gameOver) return;
+    e.preventDefault();
+    const dx = e.touches[0].clientX - touchStartX;
+    const dy = e.touches[0].clientY - touchStartY;
+    const deadzone = 8;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    if (absDx > deadzone || absDy > deadzone) {
+      if (absDx > absDy) {
+        keys.a = dx < -deadzone;
+        keys.d = dx > deadzone;
+        keys.w = false; keys.s = false;
+      } else {
+        keys.w = dy < -deadzone;
+        keys.s = dy > deadzone;
+        keys.a = false; keys.d = false;
+      }
+    } else {
+      keys.w = false; keys.a = false; keys.s = false; keys.d = false;
+    }
+  });
+  document.addEventListener('touchend', () => {
+    keys.w = false; keys.a = false; keys.s = false; keys.d = false;
+  });
+
+})();
+</script>
+</body>
+</html>
